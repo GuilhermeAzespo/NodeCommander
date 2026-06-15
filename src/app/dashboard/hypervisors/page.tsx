@@ -14,7 +14,8 @@ import {
   Settings,
   ChevronDown,
   Terminal,
-  ExternalLink
+  ExternalLink,
+  ChevronRight
 } from "lucide-react";
 
 interface Hypervisor {
