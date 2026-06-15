@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
-import { ProviderFactory } from "@/lib/providers/provider";
-import prisma from "@/lib/prisma";
+import { getProviderForHypervisor } from "@/lib/providers/factory";
+import { prisma } from "@/lib/db";
 
 export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -19,14 +19,7 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
       return NextResponse.json({ error: "Hipervisor não encontrado." }, { status: 404 });
     }
 
-    const provider = ProviderFactory.getProvider(
-      hypervisor.type,
-      hypervisor.host,
-      hypervisor.port,
-      hypervisor.username,
-      hypervisor.credential,
-      hypervisor.nodeName
-    );
+    const provider = await getProviderForHypervisor(params.id);
 
     if (!provider.createTermProxy) {
       return NextResponse.json({ error: "O hipervisor não suporta proxy VNC/Terminal." }, { status: 400 });
