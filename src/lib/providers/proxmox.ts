@@ -437,4 +437,38 @@ export class ProxmoxProvider implements HypervisorProvider {
       return false;
     }
   }
+
+  async createVncProxy(vmId: string): Promise<{ ticket: string; port: number; host: string; node: string } | null> {
+    if (this.isMock) return null;
+    try {
+      const node = await this.resolveNodeForVM(vmId);
+      const data = await this.request("POST", `/nodes/${node}/qemu/${vmId}/vncproxy`, { websocket: 1 });
+      return {
+        ticket: data.ticket,
+        port: data.port,
+        host: this.host.replace(/^https?:\/\//, ""),
+        node: node
+      };
+    } catch (err) {
+      console.error(`Proxmox createVncProxy failed for ${vmId}:`, err);
+      return null;
+    }
+  }
+
+  async createTermProxy(nodeName?: string): Promise<{ ticket: string; port: number; host: string; node: string } | null> {
+    if (this.isMock) return null;
+    try {
+      const node = nodeName || this.nodeName;
+      const data = await this.request("POST", `/nodes/${node}/termproxy`, { websocket: 1 });
+      return {
+        ticket: data.ticket,
+        port: data.port,
+        host: this.host.replace(/^https?:\/\//, ""),
+        node: node
+      };
+    } catch (err) {
+      console.error(`Proxmox createTermProxy failed for node ${nodeName}:`, err);
+      return null;
+    }
+  }
 }

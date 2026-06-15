@@ -25,4 +25,8 @@ export interface HypervisorProvider {
   rebootVM(vmId: string): Promise<boolean>;
   deleteVM(vmId: string): Promise<boolean>;
   createVM(params: { name: string; cpu: number; memory: number; disk: number; image: string }): Promise<boolean>;
+  
+  // Optional VNC methods
+  createVncProxy?(vmId: string): Promise<{ ticket: string; port: number; host: string; node: string } | null>;
+  createTermProxy?(nodeName?: string): Promise<{ ticket: string; port: number; host: string; node: string } | null>;
 }

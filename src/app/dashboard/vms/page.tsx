@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { 
   Cpu, 
   Play, 
@@ -21,6 +22,8 @@ import {
   Sparkles,
   Terminal
 } from "lucide-react";
+
+const NoVncConsole = dynamic(() => import("@/components/NoVncConsole"), { ssr: false });
 
 interface VM {
   id: string;
@@ -76,11 +79,34 @@ export default function VMsPage() {
 
   // Console States
   const [consoleModalOpen, setConsoleModalOpen] = useState(false);
-  const [selectedVmForConsole, setSelectedVmForConsole] = useState<VM | null>(null);
+  const [selectedVmForConsole, setSelectedVmForConsole] = useState<any>(null);
+  const [vncProxyData, setVncProxyData] = useState<{ticket: string, port: number, host: string, node: string} | null>(null);
+  const [vncLoading, setVncLoading] = useState(false);
+  const [vncError, setVncError] = useState<string | null>(null);
 
-  const handleOpenConsole = (vm: VM) => {
+  const handleOpenConsole = async (vm: any) => {
     setSelectedVmForConsole(vm);
     setConsoleModalOpen(true);
+    setVncProxyData(null);
+    setVncError(null);
+    setVncLoading(true);
+
+    try {
+      const res = await fetch(`/api/vms/${vm.id}/vnc`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      
+      if (!res.ok) {
+        throw new Error(data.error || "Erro ao obter acesso ao console");
+      }
+      
+      setVncProxyData(data);
+    } catch (err: any) {
+      setVncError(err.message);
+    } finally {
+      setVncLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -690,86 +716,76 @@ export default function VMsPage() {
 
       {/* Console Access Modal */}
       {consoleModalOpen && selectedVmForConsole && (
-        <div className="fixed inset-0 bg-bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-bg-secondary border border-border-color rounded-2xl w-full max-w-md shadow-2xl relative animate-scale-up overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-bg-secondary w-full max-w-4xl rounded-2xl shadow-2xl border border-border-color overflow-hidden flex flex-col max-h-[90vh]">
             {/* Modal Header */}
-            <div className="p-6 border-b border-border-color">
+            <div className="p-6 border-b border-border-color shrink-0">
               <h2 className="text-xl font-bold text-text-primary flex items-center gap-2">
-                <Terminal className="w-5 h-5 text-blue-550" />
-                Console - {selectedVmForConsole.name}
+                <Terminal className="w-5 h-5 text-blue-500" />
+                Console da VM: <span className="text-blue-500">{selectedVmForConsole.name}</span>
               </h2>
-              <p className="text-text-secondary text-xs mt-1">Selecione o método de acesso ao console da máquina virtual.</p>
+              <p className="text-text-secondary text-xs mt-1">Acesso direto ao terminal e interface gráfica da máquina virtual.</p>
             </div>
 
             {/* Modal Content */}
-            <div className="p-6 space-y-4">
-              <div className="bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-xl p-4 text-xs space-y-1.5 leading-relaxed">
-                <p className="font-bold flex items-center gap-1.5">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  Requisito de Autenticação
-                </p>
-                <p>
-                  Como o Proxmox utiliza cookies e certificados específicos por segurança, certifique-se de já estar logado na interface do seu Proxmox VE nesta sessão do navegador para abrir o console diretamente.
-                </p>
-              </div>
-
-              {(() => {
-                const selectedHv = hypervisors.find(h => h.id === selectedHvId);
-                if (!selectedHv) return null;
-                
-                // Construct URL variables
-                const host = selectedHv.host.replace(/^https?:\/\//, "");
-                const port = selectedHv.port || 8006;
-                const node = selectedVmForConsole.node || selectedHv.nodeName || "pve";
-                const vmid = selectedVmForConsole.id;
-                
-                const directUrl = `https://${host}:${port}/?console=kvm&novnc=1&vmid=${vmid}&node=${node}`;
-                const panelUrl = `https://${host}:${port}/#v1:0:18:4:${node}:${vmid}:console`;
-
-                return (
-                  <div className="space-y-3 pt-2">
-                    <a
-                      href={directUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-between p-4 bg-bg-primary hover:bg-bg-tertiary border border-border-color hover:border-blue-500/35 rounded-xl group transition-all cursor-pointer"
+            <div className="p-4 flex-1 overflow-auto bg-black min-h-[400px]">
+              {vncLoading && (
+                <div className="h-full flex flex-col items-center justify-center text-text-secondary">
+                  <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+                  <p className="text-sm">Negociando conexão segura com o Proxmox...</p>
+                </div>
+              )}
+              
+              {vncError && (
+                <div className="h-full flex items-center justify-center p-6">
+                  <div className="bg-red-500/10 border border-red-500/20 text-red-500 rounded-xl p-6 max-w-md text-center space-y-3">
+                    <AlertCircle className="w-8 h-8 mx-auto" />
+                    <p className="font-bold">Falha ao Conectar</p>
+                    <p className="text-xs">{vncError}</p>
+                    <button 
+                      onClick={() => handleOpenConsole(selectedVmForConsole)}
+                      className="mt-4 px-4 py-2 bg-red-500/20 hover:bg-red-500/30 rounded-lg text-xs font-semibold transition-colors"
                     >
-                      <div className="space-y-1">
-                        <div className="text-sm font-bold text-text-primary group-hover:text-blue-550 flex items-center gap-1.5 transition-colors">
-                          Console Direto noVNC
-                          <ExternalLink className="w-3.5 h-3.5 text-text-muted group-hover:text-blue-550 transition-colors" />
-                        </div>
-                        <div className="text-[11px] text-text-secondary">Apenas a tela do terminal/SO em uma aba limpa.</div>
-                      </div>
-                      <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-blue-550 transition-colors" />
-                    </a>
-
-                    <a
-                      href={panelUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-between p-4 bg-bg-primary hover:bg-bg-tertiary border border-border-color hover:border-indigo-500/35 rounded-xl group transition-all cursor-pointer"
-                    >
-                      <div className="space-y-1">
-                        <div className="text-sm font-bold text-text-primary group-hover:text-indigo-500 flex items-center gap-1.5 transition-colors">
-                          Ir para o Painel do Proxmox
-                          <ExternalLink className="w-3.5 h-3.5 text-text-muted group-hover:text-indigo-500 transition-colors" />
-                        </div>
-                        <div className="text-[11px] text-text-secondary">Carrega a VM focada no painel administrativo principal.</div>
-                      </div>
-                      <ChevronRight className="w-5 h-5 text-text-muted group-hover:text-indigo-500 transition-colors" />
-                    </a>
+                      Tentar Novamente
+                    </button>
                   </div>
-                );
-              })()}
+                </div>
+              )}
+
+              {vncProxyData && !vncLoading && !vncError && (
+                <div className="h-full">
+                  <NoVncConsole 
+                    ticket={vncProxyData.ticket}
+                    port={vncProxyData.port}
+                    host={vncProxyData.host}
+                    node={vncProxyData.node}
+                    vmid={selectedVmForConsole.id}
+                    type="vm"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Modal Footer */}
-            <div className="p-6 border-t border-border-color bg-bg-secondary/50 flex justify-end">
+            <div className="p-4 border-t border-border-color bg-bg-secondary/50 flex justify-between items-center shrink-0">
+               {(() => {
+                const selectedHv = hypervisors.find(h => h.id === selectedHvId);
+                if (!selectedHv) return null;
+                const host = selectedHv.host.replace(/^https?:\/\//, "");
+                const port = selectedHv.port || 8006;
+                const node = selectedVmForConsole.node || selectedHv.nodeName || "pve";
+                const panelUrl = `https://${host}:${port}/#v1:0:18:4:${node}:${selectedVmForConsole.id}:console`;
+                
+                return (
+                  <a href={panelUrl} target="_blank" rel="noreferrer" className="text-xs text-text-muted hover:text-blue-500 transition-colors flex items-center gap-1">
+                    <ExternalLink className="w-3 h-3" /> Abrir no painel oficial do Proxmox
+                  </a>
+                )
+               })()}
               <button
                 type="button"
                 onClick={() => setConsoleModalOpen(false)}
-                className="px-4 py-2 border border-border-color hover:bg-bg-tertiary text-text-secondary hover:text-text-primary rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                className="px-6 py-2 border border-border-color hover:bg-bg-tertiary text-text-secondary hover:text-text-primary rounded-xl text-xs font-semibold transition-colors cursor-pointer"
               >
                 Fechar
               </button>
