@@ -355,7 +355,7 @@ export default function HypervisorsPage() {
       {/* Creation / Edition Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-bg-secondary border border-border-color rounded-2xl w-full max-w-lg shadow-2xl relative animate-scale-up">
+          <div className="bg-bg-secondary border border-border-color rounded-2xl w-full max-w-xl shadow-2xl relative animate-scale-up">
             {/* Modal Header */}
             <div className="p-6 border-b border-border-color">
               <h2 className="text-xl font-bold text-text-primary flex items-center gap-2">
@@ -367,8 +367,8 @@ export default function HypervisorsPage() {
 
             {/* Modal Body */}
             <form onSubmit={handleSubmit}>
-              <div className="p-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+              <div className="p-6 space-y-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
                     <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Nome</label>
                     <input
@@ -377,7 +377,7 @@ export default function HypervisorsPage() {
                       value={name}
                       onChange={(e) => setName(e.target.value)}
                       placeholder="Proxmox Core 1"
-                      className="w-full px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 text-sm transition-colors"
+                      className="w-full px-3.5 py-2.5 bg-bg-primary border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-sm transition-all"
                     />
                   </div>
                   <div>
@@ -386,7 +386,7 @@ export default function HypervisorsPage() {
                       <select
                         value={type}
                         onChange={(e) => setType(e.target.value)}
-                        className="w-full appearance-none pr-10 px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary focus:outline-none focus:border-blue-500 text-sm transition-colors cursor-pointer"
+                        className="w-full appearance-none pr-10 px-3.5 py-2.5 bg-bg-primary border border-input-border rounded-xl text-text-primary focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-sm transition-all cursor-pointer"
                       >
                         <option value="PROXMOX">Proxmox VE</option>
                         <option value="VMWARE" disabled>VMware ESXi (Em breve)</option>
@@ -395,18 +395,16 @@ export default function HypervisorsPage() {
                       <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none" />
                     </div>
                   </div>
-                </div>
 
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="col-span-2">
+                  <div>
                     <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Host (IP / FQDN)</label>
                     <input
                       type="text"
                       required
                       value={host}
                       onChange={(e) => setHost(e.target.value)}
-                      placeholder="192.168.1.10 or mock"
-                      className="w-full px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 text-sm transition-colors"
+                      placeholder="192.168.1.10"
+                      className="w-full px-3.5 py-2.5 bg-bg-primary border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-sm transition-all"
                     />
                   </div>
                   <div>
@@ -417,12 +415,10 @@ export default function HypervisorsPage() {
                       value={port}
                       onChange={(e) => setPort(parseInt(e.target.value))}
                       placeholder="8006"
-                      className="w-full px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 text-sm transition-colors"
+                      className="w-full px-3.5 py-2.5 bg-bg-primary border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-sm transition-all"
                     />
                   </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Usuário</label>
                     <input
@@ -431,7 +427,7 @@ export default function HypervisorsPage() {
                       value={username}
                       onChange={(e) => setUsername(e.target.value)}
                       placeholder="root@pam"
-                      className="w-full px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 text-sm transition-colors"
+                      className="w-full px-3.5 py-2.5 bg-bg-primary border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-sm transition-all"
                     />
                   </div>
                   <div>
@@ -442,27 +438,27 @@ export default function HypervisorsPage() {
                       value={nodeName}
                       onChange={(e) => setNodeName(e.target.value)}
                       placeholder="pve"
-                      className="w-full px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 text-sm transition-colors"
+                      className="w-full px-3.5 py-2.5 bg-bg-primary border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-sm transition-all"
                     />
                   </div>
-                </div>
 
-                <div>
-                  <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Senha ou Token de API</label>
-                  <div className="relative">
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted w-4 h-4" />
-                    <input
-                      type="password"
-                      required
-                      value={credential}
-                      onChange={(e) => setCredential(e.target.value)}
-                      placeholder="••••••••"
-                      className="w-full pl-9 pr-4 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 text-sm transition-colors"
-                    />
+                  <div className="md:col-span-2">
+                    <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Senha ou Token de API</label>
+                    <div className="relative">
+                      <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted w-4 h-4" />
+                      <input
+                        type="password"
+                        required
+                        value={credential}
+                        onChange={(e) => setCredential(e.target.value)}
+                        placeholder="••••••••"
+                        className="w-full pl-10 pr-4 py-2.5 bg-bg-primary border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 text-sm transition-all"
+                      />
+                    </div>
+                    <p className="text-[10px] text-text-muted mt-1.5">
+                      No caso de Token, cole a chave de API diretamente. A credencial será criptografada.
+                    </p>
                   </div>
-                  <p className="text-[10px] text-text-muted mt-1.5">
-                    No caso de Token, cole a chave de API diretamente. A credencial será criptografada.
-                  </p>
                 </div>
               </div>
 
