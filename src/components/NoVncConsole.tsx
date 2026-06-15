@@ -44,7 +44,7 @@ export default function NoVncConsole({ ticket, port, host, node, vmid, type }: N
       rfb.addEventListener("connect", () => {
         setStatus("Conectado");
       });
-      rfb.addEventListener("disconnect", (e) => {
+      rfb.addEventListener("disconnect", (e: any) => {
         setStatus(`Desconectado: ${(e as any).detail?.reason || "Conexão encerrada"}`);
       });
       rfb.addEventListener("credentialsrequired", () => {
