@@ -12,6 +12,7 @@ import {
   Terminal 
 } from "lucide-react";
 import ActiveLink from "./ActiveLink";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export const dynamic = "force-dynamic";
 
@@ -29,17 +30,17 @@ export default async function DashboardLayout({
   const isAdmin = user.role === "ADMIN";
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-bg-primary text-text-primary flex flex-col md:flex-row">
       {/* Sidebar */}
-      <aside className="w-full md:w-64 bg-slate-900 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col shrink-0">
+      <aside className="w-full md:w-64 bg-bg-secondary border-b md:border-b-0 md:border-r border-border-color flex flex-col shrink-0">
         {/* Logo Header */}
-        <div className="p-6 border-b border-slate-800 flex items-center gap-3">
-          <div className="p-2 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-lg">
+        <div className="p-6 border-b border-border-color flex items-center gap-3">
+          <div className="p-2 bg-blue-500/10 border border-blue-500/20 text-blue-500 rounded-lg">
             <Terminal className="w-5 h-5" />
           </div>
           <div>
-            <span className="font-bold text-white tracking-wide block">NodeCommander</span>
-            <span className="text-[10px] text-slate-500 font-semibold uppercase tracking-wider block">Central v0.1</span>
+            <span className="font-bold text-text-primary tracking-wide block">NodeCommander</span>
+            <span className="text-[10px] text-text-muted font-semibold uppercase tracking-wider block">Central v0.1</span>
           </div>
         </div>
 
@@ -62,7 +63,7 @@ export default async function DashboardLayout({
 
           {isAdmin && (
             <>
-              <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+              <div className="pt-4 pb-2 px-3 text-[10px] font-bold text-text-muted uppercase tracking-wider">
                 Administração
               </div>
               <ActiveLink href="/dashboard/users">
@@ -78,23 +79,26 @@ export default async function DashboardLayout({
         </nav>
 
         {/* User Footer info */}
-        <div className="p-4 border-t border-slate-800 bg-slate-900/50 flex items-center justify-between gap-3">
+        <div className="p-4 border-t border-border-color bg-bg-secondary/50 flex items-center justify-between gap-3">
           <div className="truncate">
-            <div className="text-sm font-semibold text-white truncate">{user.name}</div>
-            <div className="text-xs text-slate-500 truncate flex items-center gap-1.5">
+            <div className="text-sm font-semibold text-text-primary truncate">{user.name}</div>
+            <div className="text-xs text-text-secondary truncate flex items-center gap-1.5">
               <span className={`w-1.5 h-1.5 rounded-full ${isAdmin ? 'bg-purple-500' : 'bg-blue-500'}`}></span>
               {user.role}
             </div>
           </div>
-          <form action="/api/auth/logout" method="POST">
-            <button
-              type="submit"
-              title="Sair do sistema"
-              className="p-2 bg-slate-950 hover:bg-red-950 border border-slate-800 hover:border-red-900 text-slate-400 hover:text-red-400 rounded-lg transition-colors cursor-pointer"
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </form>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <ThemeToggle />
+            <form action="/api/auth/logout" method="POST">
+              <button
+                type="submit"
+                title="Sair do sistema"
+                className="p-2.5 bg-bg-primary hover:bg-red-500/10 border border-border-color hover:border-red-500/30 text-text-secondary hover:text-red-500 rounded-xl transition-all cursor-pointer flex items-center justify-center"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            </form>
+          </div>
         </div>
       </aside>
 
