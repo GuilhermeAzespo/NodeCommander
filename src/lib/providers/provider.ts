@@ -6,6 +6,7 @@ export interface VM {
   memory: number;   // MB (RAM)
   disk: number;     // GB (Disco)
   ipAddress?: string;
+  node?: string;
 }
 
 export interface HostMetrics {

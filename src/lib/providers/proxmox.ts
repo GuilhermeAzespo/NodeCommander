@@ -264,6 +264,7 @@ export class ProxmoxProvider implements HypervisorProvider {
             memory: Math.round(item.maxmem / (1024 * 1024)), // Bytes to MB
             disk: Math.round(item.maxdisk / (1024 * 1024 * 1024)), // Bytes to GB
             ipAddress: undefined,
+            node: item.node,
           };
         });
       }
@@ -285,6 +286,7 @@ export class ProxmoxProvider implements HypervisorProvider {
           memory: Math.round(item.maxmem / (1024 * 1024)), // Bytes to MB
           disk: Math.round(item.maxdisk / (1024 * 1024 * 1024)), // Bytes to GB
           ipAddress: undefined,
+          node: this.nodeName,
         };
       });
 
