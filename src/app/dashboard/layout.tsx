@@ -15,7 +15,20 @@ import {
 import ActiveLink from "./ActiveLink";
 import ThemeToggle from "@/components/ThemeToggle";
 
+import fs from "fs";
+import path from "path";
+
 export const dynamic = "force-dynamic";
+
+function getSystemVersion(): string {
+  try {
+    const packageJsonPath = path.join(process.cwd(), "package.json");
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+    return packageJson.version || "0.1.0";
+  } catch (err) {
+    return "0.1.0";
+  }
+}
 
 export default async function DashboardLayout({
   children,
@@ -29,6 +42,7 @@ export default async function DashboardLayout({
   }
 
   const isAdmin = user.role === "ADMIN";
+  const version = getSystemVersion();
 
   return (
     <div className="min-h-screen md:h-screen md:overflow-hidden bg-bg-primary text-text-primary flex flex-col md:flex-row">
@@ -41,7 +55,7 @@ export default async function DashboardLayout({
           </div>
           <div>
             <span className="font-bold text-text-primary tracking-wide block">NodeCommander</span>
-            <span className="text-[10px] text-text-muted font-semibold uppercase tracking-wider block">Central v0.1</span>
+            <span className="text-[10px] text-text-muted font-semibold uppercase tracking-wider block">Central v{version}</span>
           </div>
         </div>
 
