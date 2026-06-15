@@ -9,7 +9,8 @@ import {
   Users, 
   Mail, 
   LogOut, 
-  Terminal 
+  Terminal,
+  RefreshCw
 } from "lucide-react";
 import ActiveLink from "./ActiveLink";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -30,7 +31,7 @@ export default async function DashboardLayout({
   const isAdmin = user.role === "ADMIN";
 
   return (
-    <div className="min-h-screen bg-bg-primary text-text-primary flex flex-col md:flex-row">
+    <div className="min-h-screen md:h-screen md:overflow-hidden bg-bg-primary text-text-primary flex flex-col md:flex-row">
       {/* Sidebar */}
       <aside className="w-full md:w-64 bg-bg-secondary border-b md:border-b-0 md:border-r border-border-color flex flex-col shrink-0">
         {/* Logo Header */}
@@ -45,7 +46,7 @@ export default async function DashboardLayout({
         </div>
 
         {/* Navigation Links */}
-        <nav className="flex-1 p-4 space-y-1">
+        <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
           <ActiveLink href="/dashboard">
             <LayoutDashboard className="w-5 h-5" />
             <span>Dashboard</span>
@@ -73,6 +74,10 @@ export default async function DashboardLayout({
               <ActiveLink href="/dashboard/smtp">
                 <Mail className="w-5 h-5" />
                 <span>Configurações SMTP</span>
+              </ActiveLink>
+              <ActiveLink href="/dashboard/update">
+                <RefreshCw className="w-5 h-5" />
+                <span>Atualização do Sistema</span>
               </ActiveLink>
             </>
           )}
