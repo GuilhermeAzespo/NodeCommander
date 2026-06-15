@@ -10,25 +10,18 @@ async function main() {
 
   console.log("Seeding database...");
 
-  // Check if admin user exists
-  const existingAdmin = await prisma.user.findFirst({
-    where: { role: "ADMIN" }
+  const passwordHash = await bcrypt.hash("admin123", 10);
+  const admin = await prisma.user.upsert({
+    where: { email: "admin@nodecommander.com" },
+    update: { passwordHash, role: "ADMIN", name: "Administrador" },
+    create: {
+      email: "admin@nodecommander.com",
+      name: "Administrador",
+      passwordHash,
+      role: "ADMIN"
+    }
   });
-
-  if (!existingAdmin) {
-    const passwordHash = await bcrypt.hash("admin123", 10);
-    const admin = await prisma.user.create({
-      data: {
-        email: "admin@nodecommander.com",
-        name: "Administrador",
-        passwordHash,
-        role: "ADMIN"
-      }
-    });
-    console.log("Admin user created: ", admin.email);
-  } else {
-    console.log("Admin user already exists");
-  }
+  console.log("Admin user updated/created: ", admin.email);
 
   // Create default SMTP config setting if not exists
   const existingSmtp = await prisma.systemSetting.findUnique({
