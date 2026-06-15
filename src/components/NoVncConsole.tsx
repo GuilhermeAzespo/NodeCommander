@@ -10,10 +10,11 @@ export interface NoVncConsoleProps {
   host: string;
   node: string;
   vmid?: string;
-  type: "vm" | "shell";
+  proxyAuthToken: string;
+  type?: "vnc" | "shell";
 }
 
-export default function NoVncConsole({ ticket, port, host, node, vmid, type }: NoVncConsoleProps) {
+export default function NoVncConsole({ ticket, port, host, node, vmid, proxyAuthToken, type }: NoVncConsoleProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<string>("Conectando...");
   const rfbRef = useRef<RFB | null>(null);
@@ -22,17 +23,18 @@ export default function NoVncConsole({ ticket, port, host, node, vmid, type }: N
     if (!containerRef.current) return;
 
     // Constrói a URL do WebSocket para o proxy interno
-    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const currentHost = window.location.host;
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     
     // A URL original do proxmox
-    const targetWsPath = type === "vm" 
-      ? `/api2/json/nodes/${node}/qemu/${vmid}/vncwebsocket` 
-      : `/api2/json/nodes/${node}/vncwebsocket`;
+    const targetWsPath = type === "shell" 
+      ? `/api2/json/nodes/${node}/vncwebsocket` 
+      : `/api2/json/nodes/${node}/qemu/${vmid}/vncwebsocket`;
       
-    const targetUrl = `wss://${host}:8006${targetWsPath}?port=${port}&vncticket=${encodeURIComponent(ticket)}`;
-
-    // Passa a URL alvo via query string para o proxy local
-    const wsUrl = `${protocol}://${window.location.host}/api/vncproxy?ticket=${encodeURIComponent(ticket)}&target=${encodeURIComponent(targetUrl)}`;
+    const targetWsUrl = `wss://${host}:${port}${targetWsPath}?port=${port}&vncticket=${encodeURIComponent(ticket)}`;
+    
+    // Our proxy URL
+    const wsUrl = `${protocol}//${currentHost}/api/vncproxy?target=${encodeURIComponent(targetWsUrl)}&ticket=${encodeURIComponent(ticket)}&proxyAuthToken=${encodeURIComponent(proxyAuthToken)}`;
 
     try {
       const rfb = new RFB(containerRef.current, wsUrl, {
