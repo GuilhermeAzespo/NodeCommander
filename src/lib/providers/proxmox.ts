@@ -161,6 +161,21 @@ export class ProxmoxProvider implements HypervisorProvider {
     }
   }
 
+  private async resolveNodeForVM(vmId: string): Promise<string> {
+    try {
+      const resources = await this.request("GET", "/cluster/resources?type=vm");
+      if (resources && Array.isArray(resources)) {
+        const vmResource = resources.find((item: any) => String(item.vmid) === String(vmId));
+        if (vmResource && vmResource.node) {
+          return vmResource.node;
+        }
+      }
+    } catch (err) {
+      console.warn(`Failed to resolve node for VM ${vmId} from cluster resources:`, err);
+    }
+    return this.nodeName; // Fallback
+  }
+
   async getHostMetrics(): Promise<HostMetrics> {
     if (this.isMock) {
       return {
@@ -171,8 +186,27 @@ export class ProxmoxProvider implements HypervisorProvider {
       };
     }
 
+    let node = this.nodeName;
     try {
-      const data = await this.request("GET", `/nodes/${this.nodeName}/status`);
+      // Test if current configured node works
+      await this.request("GET", `/nodes/${node}/status`);
+    } catch (err) {
+      // Fallback: Query first online node
+      try {
+        const nodesList = await this.request("GET", "/nodes");
+        if (nodesList && Array.isArray(nodesList)) {
+          const activeNode = nodesList.find((n: any) => n.status === "online");
+          if (activeNode) {
+            node = activeNode.node;
+          }
+        }
+      } catch (nodesErr) {
+        console.error("Failed to query nodes fallback list:", nodesErr);
+      }
+    }
+
+    try {
+      const data = await this.request("GET", `/nodes/${node}/status`);
       const cpu = data.cpu || 0;
       const memory = data.memory || { used: 0, total: 1 };
       const disk = data.disk || { used: 0, total: 1 };
@@ -185,7 +219,7 @@ export class ProxmoxProvider implements HypervisorProvider {
         uptime,
       };
     } catch (err) {
-      console.error(`Proxmox getHostMetrics failed for node ${this.nodeName}:`, err);
+      console.error(`Proxmox getHostMetrics failed for node ${node}:`, err);
       return { cpuUsage: 0, memoryUsage: 0, diskUsage: 0, uptime: 0 };
     }
   }
@@ -196,7 +230,34 @@ export class ProxmoxProvider implements HypervisorProvider {
     }
 
     try {
-      // List QEMU VMs (Virtual Machines)
+      // Try fetching cluster-wide resource list first (much more robust)
+      let clusterResources: any[] = [];
+      try {
+        clusterResources = await this.request("GET", "/cluster/resources?type=vm");
+      } catch (clusterErr) {
+        console.warn("Failed to fetch /cluster/resources, falling back to node qemu:", clusterErr);
+      }
+
+      if (clusterResources && clusterResources.length > 0) {
+        return clusterResources.map((item: any) => {
+          let status: VM["status"] = "UNKNOWN";
+          if (item.status === "running") status = "RUNNING";
+          if (item.status === "stopped") status = "STOPPED";
+          if (item.status === "paused") status = "PAUSED";
+
+          return {
+            id: String(item.vmid),
+            name: item.name,
+            status,
+            cpu: item.maxcpu || 1,
+            memory: Math.round(item.maxmem / (1024 * 1024)), // Bytes to MB
+            disk: Math.round(item.maxdisk / (1024 * 1024 * 1024)), // Bytes to GB
+            ipAddress: undefined,
+          };
+        });
+      }
+
+      // Fallback: List node QEMU VMs specifically
       const qemuList = await this.request("GET", `/nodes/${this.nodeName}/qemu`);
       
       const vms: VM[] = qemuList.map((item: any) => {
@@ -212,7 +273,7 @@ export class ProxmoxProvider implements HypervisorProvider {
           cpu: item.cpus || 1,
           memory: Math.round(item.maxmem / (1024 * 1024)), // Bytes to MB
           disk: Math.round(item.maxdisk / (1024 * 1024 * 1024)), // Bytes to GB
-          ipAddress: undefined, // Will try to query below or display in UI
+          ipAddress: undefined,
         };
       });
 
@@ -235,7 +296,8 @@ export class ProxmoxProvider implements HypervisorProvider {
     }
 
     try {
-      await this.request("POST", `/nodes/${this.nodeName}/qemu/${vmId}/status/start`);
+      const node = await this.resolveNodeForVM(vmId);
+      await this.request("POST", `/nodes/${node}/qemu/${vmId}/status/start`);
       return true;
     } catch (err) {
       console.error(`Proxmox startVM failed for ${vmId}:`, err);
@@ -254,13 +316,15 @@ export class ProxmoxProvider implements HypervisorProvider {
     }
 
     try {
+      const node = await this.resolveNodeForVM(vmId);
       // Default to shutdown (graceful), if that throws, we stop
-      await this.request("POST", `/nodes/${this.nodeName}/qemu/${vmId}/status/shutdown`);
+      await this.request("POST", `/nodes/${node}/qemu/${vmId}/status/shutdown`);
       return true;
     } catch (err) {
       try {
+        const node = await this.resolveNodeForVM(vmId);
         console.warn(`Shutdown failed, trying hard stop for VM ${vmId}:`, err);
-        await this.request("POST", `/nodes/${this.nodeName}/qemu/${vmId}/status/stop`);
+        await this.request("POST", `/nodes/${node}/qemu/${vmId}/status/stop`);
         return true;
       } catch (stopErr) {
         console.error(`Proxmox stopVM/stop failed for ${vmId}:`, stopErr);
@@ -280,7 +344,8 @@ export class ProxmoxProvider implements HypervisorProvider {
     }
 
     try {
-      await this.request("POST", `/nodes/${this.nodeName}/qemu/${vmId}/status/reboot`);
+      const node = await this.resolveNodeForVM(vmId);
+      await this.request("POST", `/nodes/${node}/qemu/${vmId}/status/reboot`);
       return true;
     } catch (err) {
       console.error(`Proxmox rebootVM failed for ${vmId}:`, err);
@@ -299,7 +364,8 @@ export class ProxmoxProvider implements HypervisorProvider {
     }
 
     try {
-      await this.request("DELETE", `/nodes/${this.nodeName}/qemu/${vmId}`);
+      const node = await this.resolveNodeForVM(vmId);
+      await this.request("DELETE", `/nodes/${node}/qemu/${vmId}`);
       return true;
     } catch (err) {
       console.error(`Proxmox deleteVM failed for ${vmId}:`, err);
@@ -338,7 +404,20 @@ export class ProxmoxProvider implements HypervisorProvider {
         net0: "virtio,bridge=vmbr0",
       };
 
-      await this.request("POST", `/nodes/${this.nodeName}/qemu`, body);
+      let node = this.nodeName;
+      try {
+        await this.request("GET", `/nodes/${node}/status`);
+      } catch (err) {
+        const nodesList = await this.request("GET", "/nodes");
+        if (nodesList && Array.isArray(nodesList)) {
+          const activeNode = nodesList.find((n: any) => n.status === "online");
+          if (activeNode) {
+            node = activeNode.node;
+          }
+        }
+      }
+
+      await this.request("POST", `/nodes/${node}/qemu`, body);
       return true;
     } catch (err) {
       console.error("Proxmox createVM failed:", err);
