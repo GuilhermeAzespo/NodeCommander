@@ -11,7 +11,8 @@ import {
   Loader2,
   Lock,
   Globe,
-  Settings
+  Settings,
+  ChevronDown
 } from "lucide-react";
 
 interface Hypervisor {
@@ -381,15 +382,18 @@ export default function HypervisorsPage() {
                   </div>
                   <div>
                     <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Tipo</label>
-                    <select
-                      value={type}
-                      onChange={(e) => setType(e.target.value)}
-                      className="w-full px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary focus:outline-none focus:border-blue-500 text-sm transition-colors cursor-pointer"
-                    >
-                      <option value="PROXMOX">Proxmox VE</option>
-                      <option value="VMWARE" disabled>VMware ESXi (Em breve)</option>
-                      <option value="HYPERV" disabled>Hyper-V (Em breve)</option>
-                    </select>
+                    <div className="relative">
+                      <select
+                        value={type}
+                        onChange={(e) => setType(e.target.value)}
+                        className="w-full appearance-none pr-10 px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary focus:outline-none focus:border-blue-500 text-sm transition-colors cursor-pointer"
+                      >
+                        <option value="PROXMOX">Proxmox VE</option>
+                        <option value="VMWARE" disabled>VMware ESXi (Em breve)</option>
+                        <option value="HYPERV" disabled>Hyper-V (Em breve)</option>
+                      </select>
+                      <ChevronDown className="absolute right-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none" />
+                    </div>
                   </div>
                 </div>
 

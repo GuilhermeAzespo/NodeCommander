@@ -36,46 +36,64 @@ async function getGitHubToken() {
   return null;
 }
 
-async function getLocalCommit() {
+function getLocalVersion(): string {
   try {
-    const { stdout } = await execAsync("git rev-parse HEAD");
-    const commitHash = stdout.trim();
-    const { stdout: msgStdout } = await execAsync("git log -1 --pretty=%B");
-    const commitMessage = msgStdout.trim();
-    return { hash: commitHash, message: commitMessage };
+    const packageJsonPath = path.join(process.cwd(), "package.json");
+    const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf-8"));
+    return packageJson.version || "0.1.0";
   } catch (err) {
-    return { hash: "unknown", message: "Não foi possível obter o commit local." };
+    return "0.1.0";
   }
 }
 
-async function getRemoteCommit() {
+async function getRemoteVersion(): Promise<string | null> {
   try {
     const token = await getGitHubToken();
     const headers: Record<string, string> = {
-      "User-Agent": "NodeCommander-Update-Agent"
+      "User-Agent": "NodeCommander-Update-Agent",
+      "Accept": "application/vnd.github.v3.raw"
     };
     if (token) {
       headers["Authorization"] = `token ${token}`;
     }
 
-    const res = await fetch("https://api.github.com/repos/GuilhermeAzespo/NodeCommander/commits/main", {
+    const res = await fetch("https://api.github.com/repos/GuilhermeAzespo/NodeCommander/contents/package.json", {
       headers,
       next: { revalidate: 60 } // cache for 1 minute
     });
     if (!res.ok) {
       throw new Error(`GitHub API returned ${res.status}`);
     }
-    const data = await res.json();
-    return {
-      hash: data.sha,
-      message: data.commit.message,
-      author: data.commit.author.name,
-      date: data.commit.author.date
-    };
+    
+    const text = await res.text();
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === "object" && parsed.content && parsed.encoding === "base64") {
+        const decoded = Buffer.from(parsed.content, "base64").toString("utf-8");
+        return JSON.parse(decoded).version || "0.1.0";
+      }
+      return parsed.version || "0.1.0";
+    } catch (e) {
+      const parsed = JSON.parse(text);
+      return parsed.version || "0.1.0";
+    }
   } catch (err: any) {
-    console.error("Failed to fetch remote commit:", err);
+    console.error("Failed to fetch remote version:", err);
     return null;
   }
+}
+
+function isVersionNewer(local: string, remote: string): boolean {
+  const localParts = local.split(".").map(Number);
+  const remoteParts = remote.split(".").map(Number);
+  
+  for (let i = 0; i < 3; i++) {
+    const r = remoteParts[i] || 0;
+    const l = localParts[i] || 0;
+    if (r > l) return true;
+    if (r < l) return false;
+  }
+  return false;
 }
 
 export async function GET() {
@@ -84,17 +102,19 @@ export async function GET() {
     return NextResponse.json({ error: "Não autorizado." }, { status: 403 });
   }
 
-  const local = await getLocalCommit();
-  const remote = await getRemoteCommit();
+  const localVersion = getLocalVersion();
+  const remoteVersion = await getRemoteVersion();
   const statusInfo = getStatus();
 
+  const updateAvailable = remoteVersion ? isVersionNewer(localVersion, remoteVersion) : false;
+
   return NextResponse.json({
-    local,
-    remote,
+    localVersion,
+    remoteVersion,
     status: statusInfo.status,
     log: statusInfo.log,
     error: statusInfo.error,
-    updateAvailable: remote ? local.hash !== remote.hash : false
+    updateAvailable
   });
 }
 

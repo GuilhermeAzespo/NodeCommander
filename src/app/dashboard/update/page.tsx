@@ -2,28 +2,20 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { 
-  GitBranch, 
   RefreshCw, 
   CheckCircle2, 
   AlertTriangle, 
   Loader2, 
   Terminal, 
   ArrowUpCircle,
-  User,
-  Calendar,
-  AlertCircle
+  AlertCircle,
+  Tag,
+  Globe
 } from "lucide-react";
 
-interface CommitInfo {
-  hash: string;
-  message: string;
-  author?: string;
-  date?: string;
-}
-
 interface UpdateData {
-  local: CommitInfo;
-  remote: CommitInfo | null;
+  localVersion: string;
+  remoteVersion: string | null;
   status: "idle" | "updating" | "success" | "failed";
   log: string;
   error: string | null;
@@ -89,7 +81,6 @@ export default function UpdatePage() {
       const res = await fetch("/api/admin/update", { method: "POST" });
       const body = await res.json();
       if (res.ok) {
-        // Refresh status to enter updating state
         fetchStatus();
       } else {
         alert(body.error || "Falha ao iniciar atualização.");
@@ -101,17 +92,11 @@ export default function UpdatePage() {
     }
   };
 
-  const formatHash = (hash: string) => hash.substring(0, 7);
-  const formatDate = (dateStr?: string) => {
-    if (!dateStr) return "";
-    return new Date(dateStr).toLocaleString("pt-BR");
-  };
-
   if (loading) {
     return (
       <div className="py-20 flex flex-col items-center justify-center gap-4">
         <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-        <p className="text-text-secondary text-sm">Carregando informações de atualização...</p>
+        <p className="text-text-secondary text-sm">Carregando informações de versão...</p>
       </div>
     );
   }
@@ -158,7 +143,7 @@ export default function UpdatePage() {
                     <span className="font-semibold text-sm">Atualizando o Sistema...</span>
                   </div>
                   <p className="text-xs text-blue-300">
-                    Baixando novos commits e recompilando a aplicação. O painel reiniciará ao terminar.
+                    Baixando nova versão e recompilando a aplicação. O painel reiniciará ao terminar.
                   </p>
                 </div>
               ) : data.status === "success" ? (
@@ -188,7 +173,7 @@ export default function UpdatePage() {
                     <span className="font-semibold text-sm">Atualização Disponível!</span>
                   </div>
                   <p className="text-xs text-amber-300">
-                    Nova versão disponível no repositório GitHub. Recomendamos atualizar para obter os recursos mais recentes.
+                    Uma nova versão foi publicada no repositório. Recomendamos atualizar para obter os recursos mais recentes.
                   </p>
                 </div>
               ) : (
@@ -198,34 +183,32 @@ export default function UpdatePage() {
                     <span className="font-semibold text-sm text-text-primary">Sistema Atualizado</span>
                   </div>
                   <p className="text-xs">
-                    Você está rodando a última versão disponível na branch `main` do GitHub.
+                    Você está rodando a última versão estável do NodeCommander.
                   </p>
                 </div>
               )}
 
               {/* Version details list */}
-              <div className="space-y-4 pt-2 border-t border-border-color">
-                <div className="flex justify-between items-start gap-4">
-                  <span className="text-xs font-semibold text-text-secondary uppercase">Commit Local</span>
-                  <div className="text-right">
-                    <span className="font-mono text-xs bg-bg-tertiary border border-border-color text-text-primary px-2 py-0.5 rounded">
-                      {formatHash(data.local.hash)}
-                    </span>
-                    <p className="text-[10px] text-text-muted mt-1 leading-snug break-all max-w-[150px]">{data.local.message.split("\n")[0]}</p>
+              <div className="space-y-4 pt-4 border-t border-border-color">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-text-secondary">
+                    <Tag className="w-4 h-4 text-text-muted" />
+                    <span className="text-xs font-semibold uppercase tracking-wider">Versão Local</span>
                   </div>
+                  <span className="text-sm font-bold text-text-primary bg-bg-tertiary px-2.5 py-1 border border-border-color rounded-lg">
+                    v{data.localVersion}
+                  </span>
                 </div>
 
-                {data.remote && (
-                  <div className="flex justify-between items-start gap-4 pt-3 border-t border-border-color/50">
-                    <span className="text-xs font-semibold text-text-secondary uppercase">Commit Remoto</span>
-                    <div className="text-right">
-                      <span className="font-mono text-xs bg-bg-tertiary border border-border-color text-text-primary px-2 py-0.5 rounded">
-                        {formatHash(data.remote.hash)}
-                      </span>
-                      <p className="text-[10px] text-text-muted mt-1 leading-snug break-all max-w-[150px]">{data.remote.message.split("\n")[0]}</p>
-                    </div>
+                <div className="flex items-center justify-between pt-3 border-t border-border-color/50">
+                  <div className="flex items-center gap-2 text-text-secondary">
+                    <Globe className="w-4 h-4 text-text-muted" />
+                    <span className="text-xs font-semibold uppercase tracking-wider">Versão Remota</span>
                   </div>
-                )}
+                  <span className="text-sm font-bold text-text-primary bg-bg-tertiary px-2.5 py-1 border border-border-color rounded-lg">
+                    {data.remoteVersion ? `v${data.remoteVersion}` : "---"}
+                  </span>
+                </div>
               </div>
 
               {/* Action Button */}
@@ -249,31 +232,6 @@ export default function UpdatePage() {
                 </button>
               )}
             </div>
-
-            {/* Remote Commit Info Details */}
-            {data.remote && (
-              <div className="p-6 bg-bg-secondary border border-border-color rounded-2xl shadow-sm space-y-4">
-                <h3 className="text-xs font-bold text-text-secondary uppercase tracking-wider">Último Commit no GitHub</h3>
-                <div className="space-y-3 text-sm">
-                  <div className="flex items-center gap-2.5 text-text-primary">
-                    <GitBranch className="w-4 h-4 text-blue-500 shrink-0" />
-                    <span className="font-medium line-clamp-2 leading-tight">{data.remote.message}</span>
-                  </div>
-                  {data.remote.author && (
-                    <div className="flex items-center gap-2.5 text-text-secondary text-xs">
-                      <User className="w-4 h-4 text-text-muted shrink-0" />
-                      <span>Autor: {data.remote.author}</span>
-                    </div>
-                  )}
-                  {data.remote.date && (
-                    <div className="flex items-center gap-2.5 text-text-secondary text-xs">
-                      <Calendar className="w-4 h-4 text-text-muted shrink-0" />
-                      <span>Data: {formatDate(data.remote.date)}</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* Console Log Column */}
