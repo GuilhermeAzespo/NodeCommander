@@ -59,6 +59,12 @@ export default function UpdatePage() {
       interval = setInterval(() => {
         fetchStatus();
       }, 2000);
+    } else if (data?.status === "success") {
+      // Reload the page automatically after 5 seconds
+      const reloadTimeout = setTimeout(() => {
+        window.location.reload();
+      }, 5000);
+      return () => clearTimeout(reloadTimeout);
     }
     return () => {
       if (interval) clearInterval(interval);
