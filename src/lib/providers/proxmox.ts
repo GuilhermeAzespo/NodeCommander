@@ -66,6 +66,17 @@ export class ProxmoxProvider implements HypervisorProvider {
       }
     }
 
+    let requestBody: string | null = null;
+    if (body) {
+      requestBody = JSON.stringify(body);
+    } else if (method === "POST" || method === "PUT") {
+      requestBody = "{}";
+    }
+
+    if (requestBody !== null) {
+      headers["Content-Length"] = String(Buffer.byteLength(requestBody));
+    }
+
     return new Promise((resolve, reject) => {
       const options: https.RequestOptions = {
         method,
@@ -94,8 +105,8 @@ export class ProxmoxProvider implements HypervisorProvider {
         reject(err);
       });
 
-      if (body) {
-        req.write(JSON.stringify(body));
+      if (requestBody !== null) {
+        req.write(requestBody);
       }
       req.end();
     });
