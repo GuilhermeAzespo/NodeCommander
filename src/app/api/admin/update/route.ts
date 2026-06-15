@@ -158,6 +158,7 @@ function runUpdateInBackground() {
   };
 
   const steps = [
+    { cmd: "git", args: ["checkout", "."] },
     { cmd: "git", args: ["pull"] },
     { cmd: "npm", args: ["install"] },
     { cmd: "npx", args: ["prisma", "generate"] },
