@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
 import { getProviderForHypervisor } from "@/lib/providers/factory";
 import { prisma } from "@/lib/db";
+import jwt from "jsonwebtoken";
 
 export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -30,12 +31,21 @@ export async function POST(req: Request, props: { params: Promise<{ id: string }
     const nodeName = body.node || hypervisor.nodeName;
 
     const proxyData = await provider.createTermProxy(nodeName);
-    
     if (!proxyData) {
-      return NextResponse.json({ error: "Falha ao gerar ticket do Terminal no Proxmox." }, { status: 500 });
+      return NextResponse.json({ error: "Falha ao obter credenciais de terminal do hipervisor." }, { status: 500 });
     }
 
-    return NextResponse.json(proxyData);
+    let proxyAuthToken = "";
+    if (provider.getAuthHeaders) {
+      const authHeaders = await provider.getAuthHeaders();
+      const jwtSecret = process.env.JWT_SECRET || "default_node_commander_secret";
+      proxyAuthToken = jwt.sign({ authHeaders }, jwtSecret, { expiresIn: '1m' });
+    }
+
+    return NextResponse.json({
+      ...proxyData,
+      proxyAuthToken
+    });
   } catch (error) {
     console.error("Term Proxy Error:", error);
     return NextResponse.json({ error: "Erro interno ao gerar proxy Terminal." }, { status: 500 });

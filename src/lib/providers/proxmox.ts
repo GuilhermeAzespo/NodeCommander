@@ -471,4 +471,25 @@ export class ProxmoxProvider implements HypervisorProvider {
       return null;
     }
   }
+
+  async getAuthHeaders(): Promise<Record<string, string>> {
+    if (this.isMock) return {};
+    const isToken = this.credential.includes("PVEAPIToken=") || this.username.includes("!");
+    if (isToken) {
+      if (this.credential.startsWith("PVEAPIToken=")) {
+        return { "Authorization": this.credential };
+      } else {
+        return { "Authorization": `PVEAPIToken=${this.username}=${this.credential}` };
+      }
+    } else {
+      const agent = new https.Agent({ rejectUnauthorized: false });
+      try {
+        const loginRes = await this.loginTicket(agent);
+        return { "Cookie": `PVEAuthCookie=${loginRes.ticket}` };
+      } catch (err) {
+        console.error("Failed to login to Proxmox to get auth headers", err);
+        return {};
+      }
+    }
+  }
 }

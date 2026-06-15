@@ -2,6 +2,7 @@ const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
 const httpProxy = require('http-proxy');
+const jwt = require('jsonwebtoken');
 
 const dev = process.env.NODE_ENV !== 'production';
 const hostname = 'localhost';
@@ -43,14 +44,30 @@ app.prepare().then(() => {
       const targetUrl = parsedUrl.query.target;
       const ticket = parsedUrl.query.ticket;
       
-      if (!targetUrl || !ticket) {
-        console.error('Missing target or ticket in VNC proxy request');
+      const proxyAuthToken = parsedUrl.query.proxyAuthToken;
+      
+      if (!targetUrl || !ticket || !proxyAuthToken) {
+        console.error('Missing target, ticket, or auth token in VNC proxy request');
         socket.destroy();
         return;
       }
 
-      // Proxmox requires the PVEAuthCookie to authenticate the websocket
-      req.headers['cookie'] = `PVEAuthCookie=${ticket}`;
+      try {
+        const jwtSecret = process.env.JWT_SECRET || "default_node_commander_secret";
+        const decoded = jwt.verify(proxyAuthToken, jwtSecret);
+        const authHeaders = decoded.authHeaders;
+        
+        // Inject auth headers (PVEAuthCookie or PVEAPIToken)
+        if (authHeaders) {
+          for (const key in authHeaders) {
+            req.headers[key.toLowerCase()] = authHeaders[key];
+          }
+        }
+      } catch (err) {
+        console.error("Invalid proxyAuthToken", err);
+        socket.destroy();
+        return;
+      }
       
       // Parse the target URL to ensure we pass the correct host header
       const target = new URL(targetUrl);

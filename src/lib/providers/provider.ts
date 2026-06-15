@@ -29,4 +29,5 @@ export interface HypervisorProvider {
   // Optional VNC methods
   createVncProxy?(vmId: string): Promise<{ ticket: string; port: number; host: string; node: string } | null>;
   createTermProxy?(nodeName?: string): Promise<{ ticket: string; port: number; host: string; node: string } | null>;
+  getAuthHeaders?(): Promise<Record<string, string>>;
 }
