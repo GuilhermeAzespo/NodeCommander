@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+// @ts-ignore
 import RFB from "@novnc/novnc";
 
 export interface NoVncConsoleProps {
