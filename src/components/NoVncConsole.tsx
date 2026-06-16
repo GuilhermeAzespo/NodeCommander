@@ -43,7 +43,7 @@ export default function NoVncConsole({ ticket, port, apiPort, host, node, vmid, 
       });
       
       rfb.scaleViewport = true;
-      rfb.resizeSession = true;
+      rfb.resizeSession = false;
       rfbRef.current = rfb;
 
       rfb.addEventListener("connect", () => {
