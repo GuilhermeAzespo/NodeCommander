@@ -28,6 +28,7 @@ export default function UpdatePage() {
   const [checking, setChecking] = useState(false);
   const [actionLoading, setActionLoading] = useState(false);
   const [pageError, setPageError] = useState<string | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
 
   const fetchStatus = async (showChecking = false) => {
@@ -80,20 +81,21 @@ export default function UpdatePage() {
   }, [data?.log]);
 
   const handleTriggerUpdate = async () => {
-    if (!confirm("Tem certeza que deseja atualizar o sistema agora? O servidor será reiniciado e ficará offline por alguns segundos.")) {
-      return;
-    }
     setActionLoading(true);
+    setPageError(null);
     try {
       const res = await fetch("/api/admin/update", { method: "POST" });
       const body = await res.json();
       if (res.ok) {
+        setShowConfirm(false);
         fetchStatus();
       } else {
-        alert(body.error || "Falha ao iniciar atualização.");
+        setPageError(body.error || "Falha ao iniciar atualização.");
+        setShowConfirm(false);
       }
     } catch (err) {
-      alert("Erro de rede ao iniciar atualização.");
+      setPageError("Erro de rede ao iniciar atualização.");
+      setShowConfirm(false);
     } finally {
       setActionLoading(false);
     }
@@ -229,23 +231,43 @@ export default function UpdatePage() {
 
               {/* Action Button */}
               {data.updateAvailable && data.status !== "updating" && data.status !== "success" && (
-                <button
-                  onClick={handleTriggerUpdate}
-                  disabled={actionLoading}
-                  className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-blue-500/10"
-                >
-                  {actionLoading ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Iniciando...</span>
-                    </>
-                  ) : (
-                    <>
+                <div className="space-y-3">
+                  {!showConfirm ? (
+                    <button
+                      onClick={() => setShowConfirm(true)}
+                      className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-semibold transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-blue-500/10 transform hover:scale-[1.02] active:scale-[0.98]"
+                    >
                       <ArrowUpCircle className="w-4 h-4" />
                       <span>Atualizar Sistema Agora</span>
-                    </>
+                    </button>
+                  ) : (
+                    <div className="space-y-2.5 p-4 bg-bg-primary border border-border-color rounded-xl animate-in fade-in duration-200">
+                      <p className="text-xs text-text-secondary text-center font-medium">
+                        O servidor será reiniciado e ficará offline por alguns segundos. Deseja prosseguir?
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setShowConfirm(false)}
+                          className="flex-1 py-2 bg-bg-secondary hover:bg-bg-tertiary text-text-primary border border-border-color rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={handleTriggerUpdate}
+                          disabled={actionLoading}
+                          className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                        >
+                          {actionLoading ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          )}
+                          <span>Confirmar</span>
+                        </button>
+                      </div>
+                    </div>
                   )}
-                </button>
+                </div>
               )}
             </div>
           </div>
