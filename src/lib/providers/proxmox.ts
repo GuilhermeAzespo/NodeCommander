@@ -386,16 +386,23 @@ export class ProxmoxProvider implements HypervisorProvider {
     }
   }
 
-  async createVM(params: { name: string; cpu: number; memory: number; disk: number; image: string }): Promise<boolean> {
+  async createVM(params: {
+    name: string;
+    cpu: number;
+    memory: number;
+    iso?: string | null;
+    disks: { storage: string; size: number }[];
+  }): Promise<boolean> {
     if (this.isMock) {
       const nextId = String(Math.max(...ProxmoxProvider.mockVMs.map((v) => parseInt(v.id))) + 1);
+      const totalDisk = params.disks.reduce((acc, d) => acc + d.size, 0);
       ProxmoxProvider.mockVMs.push({
         id: nextId,
         name: params.name,
         status: "STOPPED",
         cpu: params.cpu,
         memory: params.memory,
-        disk: params.disk,
+        disk: totalDisk,
       });
       return true;
     }
@@ -404,18 +411,6 @@ export class ProxmoxProvider implements HypervisorProvider {
       // Find a free VM ID
       const clusterNextIdData = await this.request("GET", "/cluster/nextid");
       const nextId = clusterNextIdData || "100";
-
-      // Build parameters for creating QEMU VM
-      const body = {
-        vmid: nextId,
-        name: params.name,
-        cores: params.cpu,
-        memory: params.memory, // in MB
-        scsihw: "virtio-scsi-pci",
-        // We add disk depending on what storage exists. Standard storage is local-lvm or local
-        virtio0: `local-lvm:${params.disk},discard=on`,
-        net0: "virtio,bridge=vmbr0",
-      };
 
       let node = this.nodeName;
       try {
@@ -430,11 +425,119 @@ export class ProxmoxProvider implements HypervisorProvider {
         }
       }
 
+      // Build parameters for creating QEMU VM
+      const body: Record<string, any> = {
+        vmid: nextId,
+        name: params.name,
+        cores: params.cpu,
+        memory: params.memory, // in MB
+        scsihw: "virtio-scsi-pci",
+        net0: "virtio,bridge=vmbr0",
+      };
+
+      // Add disks as virtio0, virtio1, virtio2...
+      params.disks.forEach((disk, idx) => {
+        body[`virtio${idx}`] = `${disk.storage}:${disk.size},discard=on`;
+      });
+
+      // Add CDROM drive (ISO)
+      if (params.iso) {
+        body["ide2"] = `${params.iso},media=cdrom`;
+      } else {
+        body["ide2"] = "media=cdrom"; // Empty CDROM
+      }
+
       await this.request("POST", `/nodes/${node}/qemu`, body);
       return true;
     } catch (err) {
       console.error("Proxmox createVM failed:", err);
       return false;
+    }
+  }
+
+  async listISOs(): Promise<{ volid: string; name: string }[]> {
+    if (this.isMock) {
+      return [
+        { volid: "local:iso/debian-12.5.0-amd64-netinst.iso", name: "debian-12.5.0-amd64-netinst.iso" },
+        { volid: "local:iso/ubuntu-24.04-live-server-amd64.iso", name: "ubuntu-24.04-live-server-amd64.iso" },
+        { volid: "local:iso/alpine-standard-3.20.0-x86_64.iso", name: "alpine-standard-3.20.0-x86_64.iso" },
+      ];
+    }
+
+    try {
+      let node = this.nodeName;
+      try {
+        await this.request("GET", `/nodes/${node}/status`);
+      } catch (err) {
+        const nodesList = await this.request("GET", "/nodes");
+        if (nodesList && Array.isArray(nodesList)) {
+          const activeNode = nodesList.find((n: any) => n.status === "online");
+          if (activeNode) {
+            node = activeNode.node;
+          }
+        }
+      }
+
+      const storages: any[] = await this.request("GET", `/nodes/${node}/storage`);
+      const isoStorages = storages.filter(s => s.content && s.content.includes("iso") && s.active === 1);
+
+      const isoList: { volid: string; name: string }[] = [];
+      for (const storage of isoStorages) {
+        try {
+          const contents: any[] = await this.request("GET", `/nodes/${node}/storage/${storage.storage}/content?content=iso`);
+          if (contents && Array.isArray(contents)) {
+            contents.forEach(item => {
+              if (item.content === "iso") {
+                const name = item.volid.split("/").pop() || item.volid;
+                isoList.push({ volid: item.volid, name });
+              }
+            });
+          }
+        } catch (err) {
+          console.warn(`Failed to list ISOs for storage ${storage.storage} on node ${node}:`, err);
+        }
+      }
+      return isoList;
+    } catch (err) {
+      console.error("Proxmox listISOs failed:", err);
+      return [];
+    }
+  }
+
+  async listStorages(): Promise<{ name: string; type: string; active: boolean; shared: boolean }[]> {
+    if (this.isMock) {
+      return [
+        { name: "local-lvm", type: "lvmthin", active: true, shared: false },
+        { name: "local", type: "dir", active: true, shared: false },
+        { name: "ceph-vm", type: "rbd", active: true, shared: true },
+      ];
+    }
+
+    try {
+      let node = this.nodeName;
+      try {
+        await this.request("GET", `/nodes/${node}/status`);
+      } catch (err) {
+        const nodesList = await this.request("GET", "/nodes");
+        if (nodesList && Array.isArray(nodesList)) {
+          const activeNode = nodesList.find((n: any) => n.status === "online");
+          if (activeNode) {
+            node = activeNode.node;
+          }
+        }
+      }
+
+      const storages: any[] = await this.request("GET", `/nodes/${node}/storage`);
+      const imageStorages = storages.filter(s => s.content && s.content.includes("images") && s.active === 1);
+      return imageStorages.map(s => ({
+        name: s.storage,
+        type: s.type,
+        active: s.active === 1,
+        shared: s.shared === 1,
+      }));
+    } catch (err) {
+      console.error("Proxmox listStorages failed:", err);
+      return [];
     }
   }
 

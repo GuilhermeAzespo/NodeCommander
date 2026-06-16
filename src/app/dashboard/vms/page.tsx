@@ -72,10 +72,19 @@ export default function VMsPage() {
   const [vmName, setVmName] = useState("");
   const [vmCpu, setVmCpu] = useState(2);
   const [vmMemory, setVmMemory] = useState(2048);
-  const [vmDisk, setVmDisk] = useState(40);
-  const [vmImage, setVmImage] = useState("debian-12-standard_amd64.tar.zst");
   const [wizardStep, setWizardStep] = useState(1);
   const [wizardLoading, setWizardLoading] = useState(false);
+
+  // Enhanced Wizard States
+  const [metricsHvList, setMetricsHvList] = useState<any[]>([]);
+  const [loadingMetricsHv, setLoadingMetricsHv] = useState(false);
+  const [selectedHvForWizard, setSelectedHvForWizard] = useState("");
+  const [availableIsos, setAvailableIsos] = useState<any[]>([]);
+  const [availableStorages, setAvailableStorages] = useState<any[]>([]);
+  const [loadingHvDetails, setLoadingHvDetails] = useState(false);
+  const [selectedIso, setSelectedIso] = useState("");
+  const [wizardDisks, setWizardDisks] = useState<{ storage: string; size: number }[]>([]);
+  const [deleteConfirmVmId, setDeleteConfirmVmId] = useState<string | null>(null);
 
   // Console States
   const [consoleModalOpen, setConsoleModalOpen] = useState(false);
@@ -189,10 +198,6 @@ export default function VMsPage() {
   };
 
   const handleDeleteVM = async (vmId: string) => {
-    if (!confirm("Deseja deletar permanentemente esta VM? Esta ação removerá todos os dados do disco!")) {
-      return;
-    }
-
     setActionLoadingId(vmId);
     setError("");
     setSuccess("");
@@ -215,6 +220,54 @@ export default function VMsPage() {
       setError("Erro ao solicitar exclusão.");
     } finally {
       setActionLoadingId(null);
+      setDeleteConfirmVmId(null);
+    }
+  };
+
+  const openWizard = async () => {
+    setVmName("");
+    setWizardStep(1);
+    setSelectedHvForWizard(selectedHvId || "");
+    setWizardDisks([{ storage: "", size: 40 }]);
+    setSelectedIso("");
+    setWizardOpen(true);
+    
+    // Fetch hypervisors metrics
+    setLoadingMetricsHv(true);
+    try {
+      const res = await fetch("/api/admin/hypervisors/metrics");
+      const data = await res.json();
+      if (res.ok) {
+        setMetricsHvList(data.hypervisors || []);
+        if (data.hypervisors?.length > 0 && !selectedHvId) {
+          setSelectedHvForWizard(data.hypervisors[0].id);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load hypervisors metrics:", err);
+    } finally {
+      setLoadingMetricsHv(false);
+    }
+  };
+
+  const fetchHvDetails = async (hvId: string) => {
+    setLoadingHvDetails(true);
+    try {
+      const res = await fetch(`/api/vms/hypervisor-details?hypervisorId=${hvId}`);
+      const data = await res.json();
+      if (res.ok) {
+        setAvailableIsos(data.isos || []);
+        setAvailableStorages(data.storages || []);
+        
+        // Default the first disk storage to the first available storage
+        if (data.storages?.length > 0) {
+          setWizardDisks([{ storage: data.storages[0].name, size: 40 }]);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load hypervisor details:", err);
+    } finally {
+      setLoadingHvDetails(false);
     }
   };
 
@@ -228,12 +281,12 @@ export default function VMsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          hypervisorId: selectedHvId,
+          hypervisorId: selectedHvForWizard,
           name: vmName,
           cpu: vmCpu,
           memory: vmMemory,
-          disk: vmDisk,
-          image: vmImage
+          disks: wizardDisks,
+          iso: selectedIso || null
         })
       });
 
@@ -242,7 +295,11 @@ export default function VMsPage() {
       if (res.ok) {
         setSuccess(`Máquina virtual "${vmName}" criada com sucesso!`);
         setWizardOpen(false);
-        fetchVMs(selectedHvId);
+        if (selectedHvForWizard === selectedHvId) {
+          fetchVMs(selectedHvId);
+        } else {
+          setSelectedHvId(selectedHvForWizard);
+        }
         setTimeout(() => setSuccess(""), 4000);
       } else {
         setError(data.error || "Falha ao criar máquina virtual.");
@@ -284,19 +341,13 @@ export default function VMsPage() {
           <h1 className="text-3xl font-extrabold text-text-primary tracking-tight">Máquinas Virtuais</h1>
           <p className="text-text-secondary mt-1">Monitore e gerencie o ciclo de vida das instâncias centralizadas.</p>
         </div>
-        {selectedHvId && (
-          <button
-            onClick={() => {
-              setVmName("");
-              setWizardStep(1);
-              setWizardOpen(true);
-            }}
-            className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-3 rounded-xl font-medium transition-colors cursor-pointer shadow-lg shadow-blue-900/10 dark:shadow-blue-900/30 shrink-0"
-          >
-            <Plus className="w-5 h-5" />
-            <span>Nova Máquina Virtual</span>
-          </button>
-        )}
+        <button
+          onClick={openWizard}
+          className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-3 rounded-xl font-medium transition-colors cursor-pointer shadow-lg shadow-blue-900/10 dark:shadow-blue-900/30 shrink-0"
+        >
+          <Plus className="w-5 h-5" />
+          <span>Nova Máquina Virtual</span>
+        </button>
       </div>
 
       {/* Notices */}
@@ -540,7 +591,7 @@ export default function VMsPage() {
 
                               {vm.status === "STOPPED" && (
                                 <button
-                                  onClick={() => handleDeleteVM(vm.id)}
+                                  onClick={() => setDeleteConfirmVmId(vm.id)}
                                   className="p-1.5 bg-bg-primary hover:bg-red-500/10 border border-border-color hover:border-red-500/30 text-text-secondary hover:text-red-500 rounded-lg transition-colors cursor-pointer"
                                   title="Deletar Máquina"
                                 >
@@ -563,7 +614,7 @@ export default function VMsPage() {
       {/* VM Wizard Modal */}
       {wizardOpen && (
         <div className="fixed inset-0 bg-bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-bg-secondary border border-border-color rounded-2xl w-full max-w-lg shadow-2xl relative animate-scale-up">
+          <div className="bg-bg-secondary border border-border-color rounded-2xl w-full max-w-2xl shadow-2xl relative animate-scale-up">
             {/* Wizard Header */}
             <div className="p-6 border-b border-border-color">
               <div className="flex items-center justify-between">
@@ -572,16 +623,84 @@ export default function VMsPage() {
                   Criar Máquina Virtual
                 </h2>
                 <span className="text-xs text-text-secondary font-bold bg-bg-primary border border-border-color px-2 py-0.5 rounded">
-                  Passo {wizardStep} de 2
+                  Passo {wizardStep} de 4
                 </span>
               </div>
-              <p className="text-text-secondary text-xs mt-1">Provisione novos recursos computacionais no nó selecionado.</p>
+              <p className="text-text-secondary text-xs mt-1">Configure o novo provisionamento de recursos de forma guiada.</p>
             </div>
 
             {/* Wizard Form */}
-            <form onSubmit={handleCreateVM}>
-              <div className="p-6 space-y-4">
-                {wizardStep === 1 ? (
+            <div>
+              <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+                {wizardStep === 1 && (
+                  <div className="space-y-4">
+                    <label className="block text-text-secondary text-xs font-bold uppercase tracking-wider">
+                      Selecione o Virtualizador / Nó Destino
+                    </label>
+                    {loadingMetricsHv ? (
+                      <div className="py-12 flex flex-col items-center justify-center gap-3">
+                        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                        <p className="text-text-secondary text-xs">Acessando nós e coletando métricas em tempo real...</p>
+                      </div>
+                    ) : metricsHvList.length === 0 ? (
+                      <div className="p-8 text-center bg-bg-primary border border-border-color rounded-xl text-text-secondary text-xs">
+                        Nenhum hipervisor configurado ou online.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {metricsHvList.map((hv) => (
+                          <div
+                            key={hv.id}
+                            onClick={() => hv.status === "online" && setSelectedHvForWizard(hv.id)}
+                            className={`p-4 border rounded-xl cursor-pointer transition-all ${
+                              selectedHvForWizard === hv.id
+                                ? "border-blue-500 bg-blue-500/5 shadow-md shadow-blue-500/5"
+                                : "border-border-color bg-bg-primary/50 hover:bg-bg-primary"
+                            } ${hv.status !== "online" ? "opacity-50 cursor-not-allowed" : ""}`}
+                          >
+                            <div className="flex items-center justify-between mb-3">
+                              <span className="font-bold text-sm text-text-primary">{hv.name}</span>
+                              <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                hv.status === "online" 
+                                  ? "bg-emerald-500/10 text-emerald-500" 
+                                  : "bg-red-500/10 text-red-500"
+                              }`}>
+                                <span className={`w-1.5 h-1.5 rounded-full ${hv.status === "online" ? "bg-emerald-500" : "bg-red-500"}`}></span>
+                                {hv.status === "online" ? "Online" : "Offline"}
+                              </span>
+                            </div>
+                            <div className="text-[10px] text-text-secondary mb-3">{hv.type} - {hv.host}</div>
+                            
+                            {hv.status === "online" && (
+                              <div className="space-y-2">
+                                <div className="space-y-1">
+                                  <div className="flex justify-between text-[10px]">
+                                    <span className="text-text-secondary">CPU Host</span>
+                                    <span className="font-semibold text-text-primary">{hv.cpuUsage}%</span>
+                                  </div>
+                                  <div className="w-full bg-input-bg h-1.5 rounded-full overflow-hidden border border-input-border">
+                                    <div className="h-full bg-blue-500" style={{ width: `${hv.cpuUsage}%` }}></div>
+                                  </div>
+                                </div>
+                                <div className="space-y-1">
+                                  <div className="flex justify-between text-[10px]">
+                                    <span className="text-text-secondary">RAM Host</span>
+                                    <span className="font-semibold text-text-primary">{hv.memoryUsage}%</span>
+                                  </div>
+                                  <div className="w-full bg-input-bg h-1.5 rounded-full overflow-hidden border border-input-border">
+                                    <div className="h-full bg-indigo-500" style={{ width: `${hv.memoryUsage}%` }}></div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {wizardStep === 2 && (
                   <div className="space-y-4">
                     <div>
                       <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Nome da VM</label>
@@ -594,21 +713,7 @@ export default function VMsPage() {
                         className="w-full px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 text-sm transition-colors"
                       />
                     </div>
-                    <div>
-                      <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Imagem / Template (Proxmox OS)</label>
-                      <input
-                        type="text"
-                        required
-                        value={vmImage}
-                        onChange={(e) => setVmImage(e.target.value)}
-                        placeholder="debian-12-standard_amd64.tar.zst"
-                        className="w-full px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 text-sm transition-colors"
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">CPU Cores</label>
                         <select
@@ -634,28 +739,133 @@ export default function VMsPage() {
                           <option value={4096}>4 GB (4096MB)</option>
                           <option value={8192}>8 GB (8192MB)</option>
                           <option value={16384}>16 GB (16384MB)</option>
+                          <option value={32768}>32 GB (32768MB)</option>
                         </select>
                       </div>
-                      <div>
-                        <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Disco (GB)</label>
+                    </div>
+                  </div>
+                )}
+
+                {wizardStep === 3 && (
+                  <div className="space-y-4">
+                    <label className="block text-text-secondary text-xs font-bold uppercase tracking-wider">
+                      Selecione a Imagem de Inicialização (ISO)
+                    </label>
+                    {loadingHvDetails ? (
+                      <div className="py-12 flex flex-col items-center justify-center gap-3">
+                        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                        <p className="text-text-secondary text-xs">Buscando ISOs disponíveis no hipervisor...</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
                         <select
-                          value={vmDisk}
-                          onChange={(e) => setVmDisk(parseInt(e.target.value))}
-                          className="w-full px-3 py-2 bg-input-bg border border-input-border rounded-xl text-text-primary text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+                          value={selectedIso}
+                          onChange={(e) => setSelectedIso(e.target.value)}
+                          className="w-full px-3 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
                         >
-                          <option value={20}>20 GB</option>
-                          <option value={40}>40 GB</option>
-                          <option value={80}>80 GB</option>
-                          <option value={100}>100 GB</option>
-                          <option value={200}>200 GB</option>
+                          <option value="">Sem ISO (Iniciar com CD-ROM vazio / Sem sistema)</option>
+                          {availableIsos.map((iso) => (
+                            <option key={iso.volid} value={iso.volid}>
+                              {iso.name} ({iso.volid.split(":")[0]})
+                            </option>
+                          ))}
                         </select>
+                        <p className="text-[10px] text-text-secondary">
+                          As ISOs listadas acima foram indexadas dos storages ativos do virtualizador.
+                        </p>
                       </div>
+                    )}
+                  </div>
+                )}
+
+                {wizardStep === 4 && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-text-secondary text-xs font-bold uppercase tracking-wider">
+                        Configuração de Armazenamento (Discos Virtuais)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const defaultStorage = availableStorages[0]?.name || "local-lvm";
+                          setWizardDisks([...wizardDisks, { storage: defaultStorage, size: 40 }]);
+                        }}
+                        className="flex items-center gap-1.5 text-xs text-blue-500 font-semibold hover:text-blue-400 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Adicionar Disco</span>
+                      </button>
                     </div>
 
-                    <div className="p-4 bg-bg-primary border border-border-color rounded-xl space-y-2 mt-4">
-                      <h4 className="text-xs font-bold text-text-primary uppercase tracking-wider">Resumo do Provisionamento</h4>
-                      <p className="text-text-secondary text-xs">A máquina será provisionada com ID dinâmico alocado automaticamente pelo cluster Proxmox VE.</p>
-                    </div>
+                    {loadingHvDetails ? (
+                      <div className="py-12 flex flex-col items-center justify-center gap-3">
+                        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                        <p className="text-text-secondary text-xs">Carregando storages compatíveis...</p>
+                      </div>
+                    ) : availableStorages.length === 0 ? (
+                      <div className="p-6 text-center bg-red-500/5 border border-red-500/10 rounded-xl text-red-400 text-xs">
+                        Aviso: Nenhum storage pool que aceite imagens de VM foi detectado no hipervisor.
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {wizardDisks.map((disk, idx) => (
+                          <div key={idx} className="p-4 bg-bg-primary/50 border border-border-color rounded-xl flex items-end gap-4">
+                            <div className="flex-1 space-y-2">
+                              <span className="block text-[10px] font-bold text-text-secondary uppercase">
+                                Disco #{idx + 1}
+                              </span>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <label className="block text-[10px] text-text-secondary mb-1">Destino (Storage)</label>
+                                  <select
+                                    value={disk.storage}
+                                    onChange={(e) => {
+                                      const updated = [...wizardDisks];
+                                      updated[idx].storage = e.target.value;
+                                      setWizardDisks(updated);
+                                    }}
+                                    className="w-full px-3 py-1.5 bg-input-bg border border-input-border rounded-lg text-text-primary text-xs focus:outline-none focus:border-blue-500 cursor-pointer"
+                                  >
+                                    {availableStorages.map((s) => (
+                                      <option key={s.name} value={s.name}>
+                                        {s.name} ({s.type})
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] text-text-secondary mb-1">Tamanho (GB)</label>
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    required
+                                    value={disk.size}
+                                    onChange={(e) => {
+                                      const updated = [...wizardDisks];
+                                      updated[idx].size = parseInt(e.target.value) || 0;
+                                      setWizardDisks(updated);
+                                    }}
+                                    className="w-full px-3 py-1.5 bg-input-bg border border-input-border rounded-lg text-text-primary text-xs focus:outline-none focus:border-blue-500"
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {wizardDisks.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setWizardDisks(wizardDisks.filter((_, i) => i !== idx));
+                                }}
+                                className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg cursor-pointer transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -671,21 +881,29 @@ export default function VMsPage() {
                 </button>
 
                 <div className="flex gap-2">
-                  {wizardStep === 2 && (
+                  {wizardStep > 1 && (
                     <button
                       type="button"
-                      onClick={() => setWizardStep(1)}
+                      onClick={() => setWizardStep(wizardStep - 1)}
                       className="px-4 py-2.5 border border-border-color hover:bg-bg-tertiary text-text-secondary hover:text-text-primary rounded-xl text-xs font-semibold transition-colors cursor-pointer"
                     >
                       Voltar
                     </button>
                   )}
 
-                  {wizardStep === 1 ? (
+                  {wizardStep < 4 ? (
                     <button
                       type="button"
-                      disabled={!vmName || !vmImage}
-                      onClick={() => setWizardStep(2)}
+                      disabled={
+                        (wizardStep === 1 && !selectedHvForWizard) ||
+                        (wizardStep === 2 && !vmName)
+                      }
+                      onClick={() => {
+                        if (wizardStep === 1) {
+                          fetchHvDetails(selectedHvForWizard);
+                        }
+                        setWizardStep(wizardStep + 1);
+                      }}
                       className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white rounded-xl text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
                     >
                       <span>Próximo</span>
@@ -694,7 +912,7 @@ export default function VMsPage() {
                   ) : (
                     <button
                       type="submit"
-                      disabled={wizardLoading}
+                      disabled={wizardLoading || wizardDisks.some(d => !d.storage || d.size <= 0)}
                       className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
                     >
                       {wizardLoading ? (
@@ -709,7 +927,51 @@ export default function VMsPage() {
                   )}
                 </div>
               </div>
-            </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmVmId && (
+        <div className="fixed inset-0 bg-bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-bg-secondary border border-border-color rounded-2xl w-full max-w-md shadow-2xl relative p-6 animate-scale-up space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-red-500/10 text-red-500 rounded-xl">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-text-primary">Confirmar Exclusão</h3>
+                <p className="text-xs text-text-secondary mt-1">
+                  Tem certeza de que deseja excluir permanentemente esta máquina virtual? Esta ação é irreversível e todos os discos virtuais associados serão destruídos.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmVmId(null)}
+                className="px-4 py-2 border border-border-color hover:bg-bg-tertiary text-text-secondary hover:text-text-primary rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={actionLoadingId === deleteConfirmVmId}
+                onClick={() => handleDeleteVM(deleteConfirmVmId)}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                {actionLoadingId === deleteConfirmVmId ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deletando...</span>
+                  </>
+                ) : (
+                  <span>Deletar Máquina</span>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

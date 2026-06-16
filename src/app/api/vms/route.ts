@@ -76,14 +76,29 @@ export async function POST(req: Request) {
       );
     }
 
-    const { hypervisorId, name, cpu, memory, disk, image } = await req.json();
+    const body = await req.json();
+    const { hypervisorId, name, cpu, memory, disks, iso, disk, image } = body;
 
-    if (!hypervisorId || !name || !cpu || !memory || !disk) {
+    if (!hypervisorId || !name || !cpu || !memory) {
       return NextResponse.json(
         { error: "Campos obrigatórios ausentes." },
         { status: 400 }
       );
     }
+
+    let resolvedDisks = disks;
+    if (!resolvedDisks || !Array.isArray(resolvedDisks) || resolvedDisks.length === 0) {
+      if (disk) {
+        resolvedDisks = [{ storage: "local-lvm", size: parseInt(disk) }];
+      } else {
+        return NextResponse.json(
+          { error: "Configuração de armazenamento (discos) ausente." },
+          { status: 400 }
+        );
+      }
+    }
+
+    const resolvedIso = iso || image || null;
 
     // Check permission: Admin or Operator with FULL access
     if (user.role !== "ADMIN") {
@@ -108,8 +123,8 @@ export async function POST(req: Request) {
       name,
       cpu: parseInt(cpu),
       memory: parseInt(memory),
-      disk: parseInt(disk),
-      image: image || ""
+      iso: resolvedIso,
+      disks: resolvedDisks
     });
 
     if (!success) {
@@ -119,11 +134,12 @@ export async function POST(req: Request) {
       );
     }
 
+    const diskDetails = resolvedDisks.map((d: any) => `${d.storage}:${d.size}GB`).join(", ");
     await prisma.activityLog.create({
       data: {
         userId: user.id,
         action: "CREATE_VM",
-        details: `Criou a VM "${name}" (CPU: ${cpu}, RAM: ${memory} MB, Disco: ${disk} GB) no hipervisor.`
+        details: `Criou a VM "${name}" (CPU: ${cpu}, RAM: ${memory} MB, Discos: [${diskDetails}], ISO: ${resolvedIso || "Nenhuma"}) no hipervisor.`
       }
     });
 
