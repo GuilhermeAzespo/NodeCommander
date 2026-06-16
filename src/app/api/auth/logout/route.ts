@@ -17,9 +17,16 @@ export async function POST(req: Request) {
     }
 
     await logoutUser();
-    return NextResponse.redirect(new URL("/login", req.url));
+    const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "localhost:3000";
+    const proto = req.headers.get("x-forwarded-proto") || "http";
+    const redirectUrl = new URL("/login", `${proto}://${host}`);
+
+    return NextResponse.redirect(redirectUrl);
   } catch (err) {
     console.error("Logout API error:", err);
-    return NextResponse.redirect(new URL("/login", req.url));
+    const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "localhost:3000";
+    const proto = req.headers.get("x-forwarded-proto") || "http";
+    const redirectUrl = new URL("/login", `${proto}://${host}`);
+    return NextResponse.redirect(redirectUrl);
   }
 }
