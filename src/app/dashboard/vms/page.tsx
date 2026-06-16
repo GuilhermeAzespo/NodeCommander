@@ -826,11 +826,24 @@ export default function VMsPage() {
                                     }}
                                     className="w-full px-3 py-1.5 bg-input-bg border border-input-border rounded-lg text-text-primary text-xs focus:outline-none focus:border-blue-500 cursor-pointer"
                                   >
-                                    {availableStorages.map((s) => (
-                                      <option key={s.name} value={s.name}>
-                                        {s.name} ({s.type})
-                                      </option>
-                                    ))}
+                                    {availableStorages.map((s) => {
+                                      const formatBytes = (bytes?: number) => {
+                                        if (bytes === undefined || bytes === null) return "";
+                                        const gb = bytes / (1024 * 1024 * 1024);
+                                        if (gb >= 1024) {
+                                          return `${(gb / 1024).toFixed(1)} TB`;
+                                        }
+                                        return `${gb.toFixed(0)} GB`;
+                                      };
+                                      const capacityText = s.avail !== undefined && s.size !== undefined
+                                        ? ` - ${formatBytes(s.avail)} livres de ${formatBytes(s.size)}`
+                                        : "";
+                                      return (
+                                        <option key={s.name} value={s.name}>
+                                          {s.name} ({s.type}){capacityText}
+                                        </option>
+                                      );
+                                    })}
                                   </select>
                                 </div>
                                 <div>
@@ -911,7 +924,8 @@ export default function VMsPage() {
                     </button>
                   ) : (
                     <button
-                      type="submit"
+                      type="button"
+                      onClick={handleCreateVM}
                       disabled={wizardLoading || wizardDisks.some(d => !d.storage || d.size <= 0)}
                       className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
                     >

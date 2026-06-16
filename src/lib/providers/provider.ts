@@ -34,7 +34,15 @@ export interface HypervisorProvider {
   
   // Optional VNC and details methods
   listISOs?(): Promise<{ volid: string; name: string }[]>;
-  listStorages?(): Promise<{ name: string; type: string; active: boolean; shared: boolean }[]>;
+  listStorages?(): Promise<{ 
+    name: string; 
+    type: string; 
+    active: boolean; 
+    shared: boolean; 
+    size?: number; 
+    used?: number; 
+    avail?: number; 
+  }[]>;
   createVncProxy?(vmId: string): Promise<{ ticket: string; port: number; host: string; node: string } | null>;
   createTermProxy?(nodeName?: string): Promise<{ ticket: string; port: number; host: string; node: string } | null>;
   getAuthHeaders?(): Promise<Record<string, string>>;

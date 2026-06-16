@@ -504,12 +504,20 @@ export class ProxmoxProvider implements HypervisorProvider {
     }
   }
 
-  async listStorages(): Promise<{ name: string; type: string; active: boolean; shared: boolean }[]> {
+  async listStorages(): Promise<{ 
+    name: string; 
+    type: string; 
+    active: boolean; 
+    shared: boolean; 
+    size?: number; 
+    used?: number; 
+    avail?: number; 
+  }[]> {
     if (this.isMock) {
       return [
-        { name: "local-lvm", type: "lvmthin", active: true, shared: false },
-        { name: "local", type: "dir", active: true, shared: false },
-        { name: "ceph-vm", type: "rbd", active: true, shared: true },
+        { name: "local-lvm", type: "lvmthin", active: true, shared: false, size: 500 * 1024 * 1024 * 1024, used: 200 * 1024 * 1024 * 1024, avail: 300 * 1024 * 1024 * 1024 },
+        { name: "local", type: "dir", active: true, shared: false, size: 100 * 1024 * 1024 * 1024, used: 40 * 1024 * 1024 * 1024, avail: 60 * 1024 * 1024 * 1024 },
+        { name: "ceph-vm", type: "rbd", active: true, shared: true, size: 2000 * 1024 * 1024 * 1024, used: 800 * 1024 * 1024 * 1024, avail: 1200 * 1024 * 1024 * 1024 },
       ];
     }
 
@@ -534,6 +542,9 @@ export class ProxmoxProvider implements HypervisorProvider {
         type: s.type,
         active: s.active === 1,
         shared: s.shared === 1,
+        size: s.total,
+        used: s.used,
+        avail: s.avail,
       }));
     } catch (err) {
       console.error("Proxmox listStorages failed:", err);
