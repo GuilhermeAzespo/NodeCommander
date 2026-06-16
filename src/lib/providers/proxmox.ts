@@ -438,7 +438,7 @@ export class ProxmoxProvider implements HypervisorProvider {
     }
   }
 
-  async createVncProxy(vmId: string): Promise<{ ticket: string; port: number; host: string; node: string } | null> {
+  async createVncProxy(vmId: string): Promise<{ ticket: string; port: number; apiPort: number; host: string; node: string } | null> {
     if (this.isMock) return null;
     try {
       const node = await this.resolveNodeForVM(vmId);
@@ -446,6 +446,7 @@ export class ProxmoxProvider implements HypervisorProvider {
       return {
         ticket: data.ticket,
         port: data.port,
+        apiPort: this.port,
         host: this.host.replace(/^https?:\/\//, ""),
         node: node
       };
@@ -455,7 +456,7 @@ export class ProxmoxProvider implements HypervisorProvider {
     }
   }
 
-  async createTermProxy(nodeName?: string): Promise<{ ticket: string; port: number; host: string; node: string } | null> {
+  async createTermProxy(nodeName?: string): Promise<{ ticket: string; port: number; apiPort: number; host: string; node: string } | null> {
     if (this.isMock) return null;
     try {
       const node = nodeName || this.nodeName;
@@ -463,6 +464,7 @@ export class ProxmoxProvider implements HypervisorProvider {
       return {
         ticket: data.ticket,
         port: data.port,
+        apiPort: this.port,
         host: this.host.replace(/^https?:\/\//, ""),
         node: node
       };

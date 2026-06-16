@@ -80,7 +80,7 @@ export default function VMsPage() {
   // Console States
   const [consoleModalOpen, setConsoleModalOpen] = useState(false);
   const [selectedVmForConsole, setSelectedVmForConsole] = useState<any>(null);
-  const [vncProxyData, setVncProxyData] = useState<{ticket: string, port: number, host: string, node: string, proxyAuthToken: string} | null>(null);
+  const [vncProxyData, setVncProxyData] = useState<{ticket: string, port: number, apiPort: number, host: string, node: string, proxyAuthToken: string} | null>(null);
   const [vncLoading, setVncLoading] = useState(false);
   const [vncError, setVncError] = useState<string | null>(null);
 
@@ -757,6 +757,7 @@ export default function VMsPage() {
                   <NoVncConsole 
                     ticket={vncProxyData.ticket}
                     port={vncProxyData.port}
+                    apiPort={vncProxyData.apiPort}
                     host={vncProxyData.host}
                     node={vncProxyData.node}
                     vmid={selectedVmForConsole.id}

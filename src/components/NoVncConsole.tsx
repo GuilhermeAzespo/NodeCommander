@@ -7,6 +7,7 @@ import RFB from "@novnc/novnc";
 export interface NoVncConsoleProps {
   ticket: string;
   port: number;
+  apiPort?: number;
   host: string;
   node: string;
   vmid?: string;
@@ -14,7 +15,7 @@ export interface NoVncConsoleProps {
   type?: "vnc" | "shell";
 }
 
-export default function NoVncConsole({ ticket, port, host, node, vmid, proxyAuthToken, type }: NoVncConsoleProps) {
+export default function NoVncConsole({ ticket, port, apiPort, host, node, vmid, proxyAuthToken, type }: NoVncConsoleProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<string>("Conectando...");
   const rfbRef = useRef<RFB | null>(null);
@@ -31,7 +32,7 @@ export default function NoVncConsole({ ticket, port, host, node, vmid, proxyAuth
       ? `/api2/json/nodes/${node}/vncwebsocket` 
       : `/api2/json/nodes/${node}/qemu/${vmid}/vncwebsocket`;
       
-    const targetWsUrl = `wss://${host}:${port}${targetWsPath}?port=${port}&vncticket=${encodeURIComponent(ticket)}`;
+    const targetWsUrl = `wss://${host}:${apiPort || 8006}${targetWsPath}?port=${port}&vncticket=${encodeURIComponent(ticket)}`;
     
     // Our proxy URL
     const wsUrl = `${protocol}//${currentHost}/api/vncproxy?target=${encodeURIComponent(targetWsUrl)}&ticket=${encodeURIComponent(ticket)}&proxyAuthToken=${encodeURIComponent(proxyAuthToken)}`;

@@ -47,8 +47,8 @@ export default function HypervisorsPage() {
   
   // Console Modal State
   const [consoleModalOpen, setConsoleModalOpen] = useState(false);
-  const [selectedHvForConsole, setSelectedHvForConsole] = useState<any>(null);
-  const [vncProxyData, setVncProxyData] = useState<{ticket: string, port: number, host: string, node: string, proxyAuthToken: string} | null>(null);
+  const [selectedHvForConsole, setSelectedHvForConsole] = useState<Hypervisor | null>(null);
+  const [vncProxyData, setVncProxyData] = useState<{ticket: string, port: number, apiPort: number, host: string, node: string, proxyAuthToken: string} | null>(null);
   const [vncLoading, setVncLoading] = useState(false);
   const [vncError, setVncError] = useState<string | null>(null);
   
@@ -580,6 +580,7 @@ export default function HypervisorsPage() {
                   <NoVncConsole 
                     ticket={vncProxyData.ticket}
                     port={vncProxyData.port}
+                    apiPort={vncProxyData.apiPort}
                     host={vncProxyData.host}
                     node={vncProxyData.node}
                     proxyAuthToken={vncProxyData.proxyAuthToken}
