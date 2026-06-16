@@ -444,14 +444,14 @@ export class ProxmoxProvider implements HypervisorProvider {
       if (params.iso) {
         body["ide2"] = `${params.iso},media=cdrom`;
       } else {
-        body["ide2"] = "media=cdrom"; // Empty CDROM
+        body["ide2"] = "none,media=cdrom"; // Empty CDROM
       }
 
       await this.request("POST", `/nodes/${node}/qemu`, body);
       return true;
-    } catch (err) {
+    } catch (err: any) {
       console.error("Proxmox createVM failed:", err);
-      return false;
+      throw new Error(err.message || "Falha desconhecida no Proxmox.");
     }
   }
 
