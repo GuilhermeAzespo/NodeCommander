@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { logoutUser, getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
-export async function POST() {
+export async function POST(req: Request) {
   try {
     const user = await getCurrentUser();
     if (user) {
@@ -17,12 +17,9 @@ export async function POST() {
     }
 
     await logoutUser();
-    return NextResponse.json({ success: true });
+    return NextResponse.redirect(new URL("/login", req.url));
   } catch (err) {
     console.error("Logout API error:", err);
-    return NextResponse.json(
-      { error: "Erro interno no servidor." },
-      { status: 500 }
-    );
+    return NextResponse.redirect(new URL("/login", req.url));
   }
 }

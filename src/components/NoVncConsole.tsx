@@ -18,10 +18,19 @@ export interface NoVncConsoleProps {
 export default function NoVncConsole({ ticket, port, apiPort, host, node, vmid, proxyAuthToken, type }: NoVncConsoleProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<string>("Conectando...");
+  const [isReady, setIsReady] = useState(false);
   const rfbRef = useRef<RFB | null>(null);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    // Permite que o container DOM monte e defina suas dimensões finais (não-zero)
+    const timer = setTimeout(() => {
+      setIsReady(true);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!isReady || !containerRef.current) return;
 
     // Constrói a URL do WebSocket para o proxy interno
     const currentHost = window.location.host;
@@ -68,7 +77,7 @@ export default function NoVncConsole({ ticket, port, apiPort, host, node, vmid, 
       console.error("NoVNC Init Error:", err);
       setStatus(`Erro interno: ${err.message}`);
     }
-  }, [ticket, port, host, node, vmid, type]);
+  }, [ticket, port, host, node, vmid, type, isReady]);
 
   return (
     <div className="flex flex-col h-full bg-black w-full">
