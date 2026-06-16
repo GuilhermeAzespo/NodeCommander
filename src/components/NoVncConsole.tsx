@@ -39,7 +39,7 @@ export default function NoVncConsole({ ticket, port, apiPort, host, node, vmid, 
 
     try {
       const rfb = new RFB(containerRef.current, wsUrl, {
-        credentials: { password: "" },
+        credentials: { password: ticket },
       });
       
       rfbRef.current = rfb;
