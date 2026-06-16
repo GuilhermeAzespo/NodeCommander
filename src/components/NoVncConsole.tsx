@@ -51,11 +51,11 @@ export default function NoVncConsole({ ticket, port, apiPort, host, node, vmid, 
         credentials: { password: ticket },
       });
       
-      rfb.scaleViewport = true;
-      rfb.resizeSession = false;
       rfbRef.current = rfb;
 
       rfb.addEventListener("connect", () => {
+        rfb.scaleViewport = true;
+        rfb.resizeSession = false;
         setStatus("Conectado");
       });
       rfb.addEventListener("disconnect", (e: any) => {
