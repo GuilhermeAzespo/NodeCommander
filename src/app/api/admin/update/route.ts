@@ -211,3 +211,16 @@ function runUpdateInBackground() {
 
   executeNext();
 }
+
+export async function DELETE() {
+  const user = await getCurrentUser();
+  if (!user || user.role !== "ADMIN") {
+    return NextResponse.json({ error: "Não autorizado." }, { status: 403 });
+  }
+  
+  if (fs.existsSync(STATUS_FILE)) {
+    fs.writeFileSync(STATUS_FILE, JSON.stringify({ status: "idle", log: "", error: null }, null, 2));
+  }
+  
+  return NextResponse.json({ success: true });
+}

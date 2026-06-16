@@ -61,7 +61,8 @@ export default function UpdatePage() {
       }, 2000);
     } else if (data?.status === "success") {
       // Reload the page automatically after 5 seconds
-      const reloadTimeout = setTimeout(() => {
+      const reloadTimeout = setTimeout(async () => {
+        await fetch("/api/admin/update", { method: "DELETE" });
         window.location.reload();
       }, 5000);
       return () => clearTimeout(reloadTimeout);
@@ -171,6 +172,15 @@ export default function UpdatePage() {
                   <p className="text-xs text-red-300">
                     Ocorreu um erro durante o processo de atualização. Verifique os logs detalhados ao lado.
                   </p>
+                  <button
+                    onClick={async () => {
+                      await fetch("/api/admin/update", { method: "DELETE" });
+                      fetchStatus();
+                    }}
+                    className="mt-2 text-xs bg-red-500/20 hover:bg-red-500/30 text-red-200 px-3 py-1.5 rounded-lg transition-colors font-medium"
+                  >
+                    Limpar Histórico de Falha
+                  </button>
                 </div>
               ) : data.updateAvailable ? (
                 <div className="p-4 bg-amber-500/10 border border-amber-500/20 text-amber-400 rounded-xl space-y-3">
