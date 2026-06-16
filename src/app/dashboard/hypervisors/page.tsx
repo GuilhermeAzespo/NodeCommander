@@ -551,7 +551,7 @@ export default function HypervisorsPage() {
             </div>
 
             {/* Modal Content */}
-            <div className="p-4 flex-1 overflow-auto bg-black min-h-[400px]">
+            <div className="flex-1 overflow-hidden bg-black flex flex-col min-h-[500px]">
               {vncLoading && (
                 <div className="h-full flex flex-col items-center justify-center text-text-secondary">
                   <div className="w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>

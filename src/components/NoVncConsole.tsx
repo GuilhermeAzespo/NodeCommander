@@ -69,19 +69,19 @@ export default function NoVncConsole({ ticket, port, apiPort, host, node, vmid, 
   }, [ticket, port, host, node, vmid, type]);
 
   return (
-    <div className="flex flex-col h-full bg-black rounded-lg overflow-hidden border border-slate-800">
-      <div className="bg-slate-900 text-slate-300 px-4 py-2 text-xs font-semibold flex justify-between items-center border-b border-slate-800">
+    <div className="flex flex-col h-full bg-black w-full">
+      <div className="bg-bg-tertiary/80 text-text-secondary px-4 py-2 text-xs font-semibold flex justify-between items-center border-b border-border-color">
         <span className="flex items-center gap-2">
           <div className={`w-2 h-2 rounded-full ${status === "Conectado" ? "bg-emerald-500" : status.startsWith("Desconectado") || status.startsWith("Erro") ? "bg-red-500" : "bg-amber-500 animate-pulse"}`}></div>
           {status}
         </span>
         <div className="flex gap-2">
-           <button onClick={() => rfbRef.current?.sendCtrlAltDel()} className="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[10px] transition-colors border border-slate-700 hover:border-slate-500">
+           <button onClick={() => rfbRef.current?.sendCtrlAltDel()} className="px-2 py-1 bg-bg-primary hover:bg-bg-secondary rounded text-[10px] transition-colors border border-border-color hover:border-text-muted">
              Ctrl+Alt+Del
            </button>
         </div>
       </div>
-      <div ref={containerRef} className="flex-1 w-full relative overflow-hidden bg-black flex items-center justify-center min-h-[500px]">
+      <div ref={containerRef} className="flex-1 w-full relative overflow-hidden bg-black flex items-center justify-center">
         {/* RFB canvas will be injected here */}
       </div>
     </div>
