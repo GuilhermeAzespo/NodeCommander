@@ -49,7 +49,19 @@ interface VM {
 
 interface Widget {
   id: string;
-  type: "vm_status" | "total_cpu" | "total_ram" | "top_cpu" | "top_ram" | "pinned_vm" | "running_list";
+  type: 
+    | "vm_status" 
+    | "total_cpu" 
+    | "total_ram" 
+    | "top_cpu" 
+    | "top_ram" 
+    | "pinned_vm" 
+    | "pinned_vm_cpu"
+    | "pinned_vm_ram"
+    | "pinned_vm_network"
+    | "pinned_vm_disk"
+    | "pinned_vm_status"
+    | "running_list";
   title: string;
   w: number; // Column span: 1, 2, or 3
   config?: {
@@ -228,7 +240,12 @@ export default function MonitoringPage() {
       total_ram: "Média de Uso de RAM",
       top_cpu: "Top VMs por CPU",
       top_ram: "Top VMs por Uso de Memória",
-      pinned_vm: "Destaque de VM específica",
+      pinned_vm: "Destaque de VM (Geral)",
+      pinned_vm_cpu: "Destaque de VM (Uso de CPU)",
+      pinned_vm_ram: "Destaque de VM (Uso de RAM)",
+      pinned_vm_network: "Destaque de VM (Tráfego de Rede)",
+      pinned_vm_disk: "Destaque de VM (Armazenamento)",
+      pinned_vm_status: "Destaque de VM (Status e Info)",
       running_list: "Painel de VMs Ativas"
     };
 
@@ -321,10 +338,13 @@ export default function MonitoringPage() {
     setDragOverIndex(null);
   };
 
-  // Mouse Drag-to-Resize Handler
+  // Mouse Drag-to-Resize Handler (with cursor locking and selection prevention)
   const handleResizeStart = (e: React.MouseEvent, widgetIndex: number) => {
     e.preventDefault();
     e.stopPropagation();
+    
+    document.body.style.cursor = "se-resize";
+    document.body.style.userSelect = "none";
     
     const startX = e.clientX;
     const element = e.currentTarget.parentElement;
@@ -334,7 +354,7 @@ export default function MonitoringPage() {
     const gridContainer = element.parentElement;
     if (!gridContainer) return;
     const gridWidth = gridContainer.getBoundingClientRect().width;
-    const colWidth = gridWidth / 3; // base 3 columns
+    const colWidth = gridWidth / 3;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = moveEvent.clientX - startX;
@@ -355,6 +375,8 @@ export default function MonitoringPage() {
     };
 
     const handleMouseUp = () => {
+      document.body.style.cursor = "auto";
+      document.body.style.userSelect = "auto";
       document.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseup", handleMouseUp);
     };
@@ -410,6 +432,51 @@ export default function MonitoringPage() {
     if (m > 0 || (d === 0 && h === 0)) parts.push(`${m}m`);
     return parts.join(" ");
   };
+
+  // Dynamic Title Generator for VM highlighted cards
+  const getWidgetTitle = (widget: Widget): string => {
+    if (widget.type.startsWith("pinned_vm")) {
+      const selectedVm = vms.find(v => v.id === widget.config?.vmId);
+      if (selectedVm) {
+        const typeSuffix = widget.type === "pinned_vm_cpu" 
+          ? " (CPU)" 
+          : widget.type === "pinned_vm_ram" 
+          ? " (RAM)" 
+          : widget.type === "pinned_vm_network" 
+          ? " (Rede)" 
+          : widget.type === "pinned_vm_disk" 
+          ? " (Disco)" 
+          : widget.type === "pinned_vm_status"
+          ? " (Status)"
+          : " (Geral)";
+        return `${selectedVm.name}${typeSuffix}`;
+      }
+    }
+    return widget.title;
+  };
+
+  // Helper renderers
+  const renderVmNotSelected = (widget: Widget) => (
+    <div className="flex flex-col items-center justify-center text-center py-4">
+      <Eye className="w-7 h-7 text-text-muted mb-2 animate-bounce-slow" />
+      <p className="text-xs text-text-muted">Nenhuma VM selecionada para monitoramento.</p>
+      {isEditing && (
+        <button
+          onClick={() => setWidgetToConfigure(widget)}
+          className="mt-2 text-xs text-blue-500 font-bold hover:underline"
+        >
+          Escolher Máquina
+        </button>
+      )}
+    </div>
+  );
+
+  const renderVmOffline = () => (
+    <div className="flex flex-col items-center justify-center py-4 bg-bg-primary rounded-xl border border-border-color border-dashed">
+      <AlertCircle className="w-4 h-4 text-text-muted mb-1" />
+      <p className="text-text-muted text-[10px] italic">VM offline. Telemetria indisponível.</p>
+    </div>
+  );
 
   return (
     <div className="space-y-8 select-none">
@@ -510,7 +577,7 @@ export default function MonitoringPage() {
                               : vm.status === "STOPPED"
                               ? "bg-bg-tertiary text-text-secondary border-border-color"
                               : vm.status === "PAUSED"
-                              ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                              ? "bg-amber-500/10 text-amber-550 border-amber-500/20"
                               : "bg-red-500/10 text-red-550 border-red-500/20"
                           }`}>
                             {vm.status}
@@ -561,7 +628,7 @@ export default function MonitoringPage() {
                               </span>
                               <div className="w-20 bg-bg-primary h-2 rounded-full overflow-hidden border border-border-color">
                                 <div 
-                                  className="bg-indigo-550 h-full rounded-full transition-all duration-500" 
+                                  className="bg-indigo-500 h-full rounded-full transition-all duration-500" 
                                   style={{ width: `${Math.round(((vm.diskUsed || 0) / vm.disk) * 100)}%` }}
                                 ></div>
                               </div>
@@ -730,11 +797,11 @@ export default function MonitoringPage() {
                   onDragOver={(e) => handleDragOver(e, index)}
                   onDragEnd={handleDragEnd}
                   onDrop={(e) => handleDrop(e, index)}
-                  className={`relative bg-bg-secondary border rounded-2xl flex flex-col overflow-hidden transition-all duration-300 ${gridSpan} ${
+                  className={`relative bg-bg-secondary border rounded-2xl flex flex-col overflow-hidden transition-all duration-300 ease-out ${gridSpan} ${
                     isEditing 
                       ? "border-dashed border-blue-500/50 ring-2 ring-blue-500/5 bg-blue-500/[0.01] cursor-grab active:cursor-grabbing" 
                       : "border-border-color hover:border-border-color/80"
-                  } ${isDragged ? "opacity-45 scale-[0.97] border-blue-600 bg-blue-600/5" : ""} ${
+                  } ${isDragged ? "opacity-20 scale-95 border-blue-600 bg-blue-600/5" : ""} ${
                     isOver ? "border-emerald-500/60 ring-4 ring-emerald-500/10 scale-[1.01]" : ""
                   }`}
                 >
@@ -770,7 +837,7 @@ export default function MonitoringPage() {
                           <TrendingUp className="w-4 h-4" />
                         )}
                       </div>
-                      <span className="font-bold text-text-primary text-sm tracking-wide">{widget.title}</span>
+                      <span className="font-bold text-text-primary text-sm tracking-wide">{getWidgetTitle(widget)}</span>
                     </div>
 
                     {/* Editor actions */}
@@ -812,8 +879,8 @@ export default function MonitoringPage() {
                           <Maximize2 className="w-3.5 h-3.5" />
                         </button>
 
-                        {/* Config action for pinned VM */}
-                        {widget.type === "pinned_vm" && (
+                        {/* Config action for pinned VM components */}
+                        {(widget.type === "pinned_vm" || widget.type.startsWith("pinned_vm_")) && (
                           <button
                             onClick={() => setWidgetToConfigure(widget)}
                             className="p-1 text-blue-500 hover:text-blue-400 hover:bg-blue-500/10 rounded transition-colors cursor-pointer"
@@ -929,29 +996,14 @@ export default function MonitoringPage() {
                       </div>
                     )}
 
+                    {/* Destaque Geral (Summary) */}
                     {widget.type === "pinned_vm" && (() => {
                       const selectedVm = vms.find(v => v.id === widget.config?.vmId);
-                      if (!selectedVm) {
-                        return (
-                          <div className="flex flex-col items-center justify-center text-center py-4">
-                            <Eye className="w-7 h-7 text-text-muted mb-2 animate-bounce-slow" />
-                            <p className="text-xs text-text-muted">Nenhuma VM selecionada para monitoramento.</p>
-                            {isEditing && (
-                              <button
-                                onClick={() => setWidgetToConfigure(widget)}
-                                className="mt-2 text-xs text-blue-500 font-bold hover:underline"
-                              >
-                                Escolher Máquina
-                              </button>
-                            )}
-                          </div>
-                        );
-                      }
+                      if (!selectedVm) return renderVmNotSelected(widget);
 
                       const isRunning = selectedVm.status === "RUNNING";
                       return (
                         <div className="space-y-4 py-1 text-xs">
-                          {/* Top Info */}
                           <div className="flex justify-between items-center pb-2 border-b border-border-color/40">
                             <div>
                               <span className="font-bold text-text-primary text-sm block">{selectedVm.name}</span>
@@ -966,7 +1018,6 @@ export default function MonitoringPage() {
 
                           {isRunning ? (
                             <div className="grid grid-cols-2 gap-3">
-                              {/* CPU info */}
                               <div className="p-3 bg-bg-primary rounded-xl border border-border-color space-y-1">
                                 <span className="text-[10px] text-text-muted font-bold tracking-wide uppercase">CPU</span>
                                 <div className="flex items-baseline justify-between">
@@ -976,7 +1027,6 @@ export default function MonitoringPage() {
                                 <div className="text-[9px] text-text-muted">Min Shares: {selectedVm.cpuShares || 1024}</div>
                               </div>
 
-                              {/* RAM info */}
                               <div className="p-3 bg-bg-primary rounded-xl border border-border-color space-y-1">
                                 <span className="text-[10px] text-text-muted font-bold tracking-wide uppercase">RAM (Memória)</span>
                                 <div className="flex items-baseline justify-between">
@@ -988,7 +1038,6 @@ export default function MonitoringPage() {
                                 </div>
                               </div>
 
-                              {/* Network traffic info */}
                               <div className="p-3 bg-bg-primary rounded-xl border border-border-color space-y-1 col-span-2">
                                 <span className="text-[10px] text-text-muted font-bold tracking-wide uppercase block">Tráfego de Rede (E/S)</span>
                                 <div className="flex justify-between items-center text-xs">
@@ -1003,7 +1052,6 @@ export default function MonitoringPage() {
                                 </div>
                               </div>
 
-                              {/* Storage info */}
                               <div className="p-3 bg-bg-primary rounded-xl border border-border-color space-y-1 col-span-2">
                                 <div className="flex justify-between items-center">
                                   <span className="text-[10px] text-text-muted font-bold tracking-wide uppercase">Armazenamento</span>
@@ -1014,12 +1062,129 @@ export default function MonitoringPage() {
                                 </div>
                               </div>
                             </div>
-                          ) : (
-                            <div className="flex flex-col items-center justify-center py-6 bg-bg-primary rounded-xl border border-border-color border-dashed">
-                              <AlertCircle className="w-5 h-5 text-text-muted mb-1" />
-                              <p className="text-text-muted text-[11px] italic">Máquina virtual offline. Telemetria indisponível.</p>
+                          ) : renderVmOffline()}
+                        </div>
+                      );
+                    })()}
+
+                    {/* NEW WIDGET 1: Pinned VM CPU */}
+                    {widget.type === "pinned_vm_cpu" && (() => {
+                      const selectedVm = vms.find(v => v.id === widget.config?.vmId);
+                      if (!selectedVm) return renderVmNotSelected(widget);
+                      const isRunning = selectedVm.status === "RUNNING";
+                      return (
+                        <div className="space-y-3 py-1">
+                          {isRunning ? (
+                            <div className="flex items-center justify-between">
+                              <div className="space-y-1">
+                                <span className="text-3xl font-extrabold text-text-primary">{selectedVm.cpuUsage || 0}%</span>
+                                <div className="text-[10.5px] text-text-secondary">{selectedVm.cpu} vCPUs &bull; Min Shares: {selectedVm.cpuShares || 1024}</div>
+                              </div>
+                              <div className="relative w-14 h-14 flex items-center justify-center">
+                                <svg className="w-full h-full transform -rotate-90">
+                                  <circle cx="28" cy="28" r="24" className="stroke-border-color" strokeWidth="5" fill="transparent" />
+                                  <circle cx="28" cy="28" r="24" className="stroke-blue-500 transition-all duration-1000" strokeWidth="5" fill="transparent" 
+                                          strokeDasharray={150} strokeDashoffset={150 - (150 * (selectedVm.cpuUsage || 0)) / 100} />
+                                </svg>
+                                <Cpu className="w-5.5 h-5.5 text-blue-500 absolute" />
+                              </div>
                             </div>
-                          )}
+                          ) : renderVmOffline()}
+                        </div>
+                      );
+                    })()}
+
+                    {/* NEW WIDGET 2: Pinned VM RAM */}
+                    {widget.type === "pinned_vm_ram" && (() => {
+                      const selectedVm = vms.find(v => v.id === widget.config?.vmId);
+                      if (!selectedVm) return renderVmNotSelected(widget);
+                      const isRunning = selectedVm.status === "RUNNING";
+                      const ramPercent = isRunning ? Math.round(((selectedVm.memoryUsed || 0) / selectedVm.memory) * 100) : 0;
+                      return (
+                        <div className="space-y-3 py-1">
+                          {isRunning ? (
+                            <div className="flex items-center justify-between">
+                              <div className="space-y-1">
+                                <span className="text-3xl font-extrabold text-text-primary">{selectedVm.memoryUsed || 0} MB</span>
+                                <div className="text-[10.5px] text-text-secondary">Limite: {selectedVm.memory} MB ({ramPercent}%)</div>
+                              </div>
+                              <div className="relative w-14 h-14 flex items-center justify-center">
+                                <svg className="w-full h-full transform -rotate-90">
+                                  <circle cx="28" cy="28" r="24" className="stroke-border-color" strokeWidth="5" fill="transparent" />
+                                  <circle cx="28" cy="28" r="24" className="stroke-indigo-500 transition-all duration-1000" strokeWidth="5" fill="transparent" 
+                                          strokeDasharray={150} strokeDashoffset={150 - (150 * ramPercent) / 100} />
+                                </svg>
+                                <Database className="w-5.5 h-5.5 text-indigo-500 absolute" />
+                              </div>
+                            </div>
+                          ) : renderVmOffline()}
+                        </div>
+                      );
+                    })()}
+
+                    {/* NEW WIDGET 3: Pinned VM Network */}
+                    {widget.type === "pinned_vm_network" && (() => {
+                      const selectedVm = vms.find(v => v.id === widget.config?.vmId);
+                      if (!selectedVm) return renderVmNotSelected(widget);
+                      const isRunning = selectedVm.status === "RUNNING";
+                      return (
+                        <div className="space-y-3 py-1">
+                          {isRunning ? (
+                            <div className="space-y-3.5">
+                              <div className="flex justify-between items-center text-xs font-mono">
+                                <span className="text-emerald-500 flex items-center gap-1.5 font-bold">
+                                  <span className="w-2 h-2 rounded-full bg-emerald-550 animate-pulse"></span>
+                                  Inbound: {formatSpeed(selectedVm.netIn)}
+                                </span>
+                                <span className="text-blue-500 flex items-center gap-1.5 font-bold">
+                                  <span className="w-2 h-2 rounded-full bg-blue-550 animate-pulse"></span>
+                                  Outbound: {formatSpeed(selectedVm.netOut)}
+                                </span>
+                              </div>
+                            </div>
+                          ) : renderVmOffline()}
+                        </div>
+                      );
+                    })()}
+
+                    {/* NEW WIDGET 4: Pinned VM Disk */}
+                    {widget.type === "pinned_vm_disk" && (() => {
+                      const selectedVm = vms.find(v => v.id === widget.config?.vmId);
+                      if (!selectedVm) return renderVmNotSelected(widget);
+                      const diskPercent = Math.round(((selectedVm.diskUsed || 0) / selectedVm.disk) * 100);
+                      return (
+                        <div className="space-y-3 py-1">
+                          <div className="space-y-2">
+                            <div className="flex justify-between items-center text-xs">
+                              <span className="text-text-secondary">Espaço Usado:</span>
+                              <span className="font-bold text-text-primary">{selectedVm.diskUsed || 0} GB / {selectedVm.disk} GB ({diskPercent}%)</span>
+                            </div>
+                            <div className="w-full bg-bg-primary h-2.5 rounded-full overflow-hidden border border-border-color">
+                              <div className="bg-indigo-500 h-full rounded-full transition-all duration-550" style={{ width: `${diskPercent}%` }}></div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* NEW WIDGET 5: Pinned VM Status */}
+                    {widget.type === "pinned_vm_status" && (() => {
+                      const selectedVm = vms.find(v => v.id === widget.config?.vmId);
+                      if (!selectedVm) return renderVmNotSelected(widget);
+                      const isRunning = selectedVm.status === "RUNNING";
+                      return (
+                        <div className="space-y-3 py-1">
+                          <div className="flex justify-between items-center">
+                            <div className="space-y-1">
+                              <div className="text-[11px] text-text-secondary">Nó: <span className="font-semibold text-text-primary">{selectedVm.node || selectedVm.hypervisorName}</span></div>
+                              <div className="text-[11px] text-text-secondary">VMID: <span className="font-mono text-text-primary">{selectedVm.id}</span></div>
+                            </div>
+                            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${
+                              isRunning 
+                                ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" 
+                                : "bg-bg-tertiary text-text-secondary border-border-color"
+                            }`}>{isRunning ? "LIGADA" : "DESLIGADA"}</span>
+                          </div>
                         </div>
                       );
                     })()}
@@ -1073,103 +1238,180 @@ export default function MonitoringPage() {
       {/* MODAL: ADICIONAR WIDGET */}
       {addWidgetModalOpen && (
         <div className="fixed inset-0 bg-bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-bg-secondary border border-border-color rounded-2xl w-full max-w-lg shadow-2xl relative animate-scale-up overflow-hidden">
+          <div className="bg-bg-secondary border border-border-color rounded-2xl w-full max-w-2xl shadow-2xl relative animate-scale-up overflow-hidden">
             <div className="p-6 border-b border-border-color">
               <h3 className="text-lg font-bold text-text-primary">Escolha um Widget</h3>
               <p className="text-xs text-text-muted mt-0.5">Selecione o elemento para adicionar ao seu dashboard.</p>
             </div>
 
-            <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[350px] overflow-y-auto">
-              <button
-                onClick={() => handleAddWidget("total_cpu")}
-                className="flex items-start gap-3 p-4 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
-              >
-                <div className="p-2 bg-blue-500/10 border border-blue-500/20 text-blue-500 rounded-lg mt-0.5">
-                  <Cpu className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="font-bold text-sm text-text-primary block">Média de CPU</span>
-                  <span className="text-[11px] text-text-secondary leading-relaxed block mt-1">Consumo agregado de CPU de todas as VMs ativas.</span>
-                </div>
-              </button>
+            <div className="p-6 space-y-6 max-h-[400px] overflow-y-auto">
+              {/* Category 1: Global metrics */}
+              <div>
+                <h4 className="text-[10px] font-extrabold uppercase text-text-muted tracking-wider mb-3">Métricas Agregadas (Global)</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    onClick={() => handleAddWidget("total_cpu")}
+                    className="flex items-start gap-2.5 p-3.5 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
+                  >
+                    <div className="p-1.5 bg-blue-500/10 border border-blue-500/20 text-blue-500 rounded-lg shrink-0">
+                      <Cpu className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-xs text-text-primary block">Média de CPU</span>
+                      <span className="text-[10px] text-text-secondary mt-0.5 leading-normal block">Consumo agregado de CPU de todas as VMs.</span>
+                    </div>
+                  </button>
 
-              <button
-                onClick={() => handleAddWidget("total_ram")}
-                className="flex items-start gap-3 p-4 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
-              >
-                <div className="p-2 bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 rounded-lg mt-0.5">
-                  <Database className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="font-bold text-sm text-text-primary block">Média de RAM</span>
-                  <span className="text-[11px] text-text-secondary leading-relaxed block mt-1">Consumo de memória RAM agregada em tempo real.</span>
-                </div>
-              </button>
+                  <button
+                    onClick={() => handleAddWidget("total_ram")}
+                    className="flex items-start gap-2.5 p-3.5 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
+                  >
+                    <div className="p-1.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 rounded-lg shrink-0">
+                      <Database className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-xs text-text-primary block">Média de RAM</span>
+                      <span className="text-[10px] text-text-secondary mt-0.5 leading-normal block">Consumo de RAM agregada do cluster.</span>
+                    </div>
+                  </button>
 
-              <button
-                onClick={() => handleAddWidget("vm_status")}
-                className="flex items-start gap-3 p-4 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
-              >
-                <div className="p-2 bg-purple-500/10 border border-purple-500/20 text-purple-500 rounded-lg mt-0.5">
-                  <Layers className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="font-bold text-sm text-text-primary block">Divisão de Status</span>
-                  <span className="text-[11px] text-text-secondary leading-relaxed block mt-1">Proporção e contagem de VMs ligadas, desligadas ou suspensas.</span>
-                </div>
-              </button>
+                  <button
+                    onClick={() => handleAddWidget("vm_status")}
+                    className="flex items-start gap-2.5 p-3.5 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
+                  >
+                    <div className="p-1.5 bg-purple-500/10 border border-purple-500/20 text-purple-500 rounded-lg shrink-0">
+                      <Layers className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-xs text-text-primary block">Divisão de Status</span>
+                      <span className="text-[10px] text-text-secondary mt-0.5 leading-normal block">Proporção de VMs ativas, suspensas e desligadas.</span>
+                    </div>
+                  </button>
 
-              <button
-                onClick={() => handleAddWidget("top_cpu")}
-                className="flex items-start gap-3 p-4 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
-              >
-                <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-lg mt-0.5">
-                  <TrendingUp className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="font-bold text-sm text-text-primary block">Top VMs por CPU</span>
-                  <span className="text-[11px] text-text-secondary leading-relaxed block mt-1">Leaderboard das 5 VMs consumindo mais processamento.</span>
-                </div>
-              </button>
+                  <button
+                    onClick={() => handleAddWidget("top_cpu")}
+                    className="flex items-start gap-2.5 p-3.5 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
+                  >
+                    <div className="p-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-lg shrink-0">
+                      <TrendingUp className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-xs text-text-primary block">Top VMs por CPU</span>
+                      <span className="text-[10px] text-text-secondary mt-0.5 leading-normal block">Leaderboard de consumo de CPU.</span>
+                    </div>
+                  </button>
 
-              <button
-                onClick={() => handleAddWidget("top_ram")}
-                className="flex items-start gap-3 p-4 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
-              >
-                <div className="p-2 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-lg mt-0.5">
-                  <TrendingUp className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="font-bold text-sm text-text-primary block">Top VMs por RAM</span>
-                  <span className="text-[11px] text-text-secondary leading-relaxed block mt-1">Leaderboard das 5 VMs com maior alocação/uso de memória.</span>
-                </div>
-              </button>
+                  <button
+                    onClick={() => handleAddWidget("top_ram")}
+                    className="flex items-start gap-2.5 p-3.5 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
+                  >
+                    <div className="p-1.5 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-lg shrink-0">
+                      <TrendingUp className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-xs text-text-primary block">Top VMs por RAM</span>
+                      <span className="text-[10px] text-text-secondary mt-0.5 leading-normal block">Leaderboard de consumo de RAM.</span>
+                    </div>
+                  </button>
 
-              <button
-                onClick={() => handleAddWidget("pinned_vm")}
-                className="flex items-start gap-3 p-4 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
-              >
-                <div className="p-2 bg-blue-500/10 border border-blue-500/20 text-blue-500 rounded-lg mt-0.5">
-                  <Eye className="w-4 h-4" />
+                  <button
+                    onClick={() => handleAddWidget("running_list")}
+                    className="flex items-start gap-2.5 p-3.5 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
+                  >
+                    <div className="p-1.5 bg-pink-500/10 border border-pink-500/20 text-pink-500 rounded-lg shrink-0">
+                      <Activity className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-xs text-text-primary block">Painel de VMs Ativas</span>
+                      <span className="text-[10px] text-text-secondary mt-0.5 leading-normal block">Lista rápida de instâncias ligadas.</span>
+                    </div>
+                  </button>
                 </div>
-                <div>
-                  <span className="font-bold text-sm text-text-primary block">VM Destacada</span>
-                  <span className="text-[11px] text-text-secondary leading-relaxed block mt-1">Fixa uma VM específica para monitorar telemetria exclusiva.</span>
-                </div>
-              </button>
+              </div>
 
-              <button
-                onClick={() => handleAddWidget("running_list")}
-                className="flex items-start gap-3 p-4 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors sm:col-span-2"
-              >
-                <div className="p-2 bg-pink-500/10 border border-pink-500/20 text-pink-500 rounded-lg mt-0.5">
-                  <Activity className="w-4 h-4" />
+              {/* Category 2: VM Specific Metrics */}
+              <div>
+                <h4 className="text-[10px] font-extrabold uppercase text-text-muted tracking-wider mb-3">Telemetria de VM Específica (Individual)</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    onClick={() => handleAddWidget("pinned_vm")}
+                    className="flex items-start gap-2.5 p-3.5 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
+                  >
+                    <div className="p-1.5 bg-blue-500/10 border border-blue-500/20 text-blue-500 rounded-lg shrink-0">
+                      <Eye className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-xs text-text-primary block">Destaque Geral (Resumo)</span>
+                      <span className="text-[10px] text-text-secondary mt-0.5 leading-normal block">Visão geral unificada com todas as métricas da VM.</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => handleAddWidget("pinned_vm_cpu")}
+                    className="flex items-start gap-2.5 p-3.5 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
+                  >
+                    <div className="p-1.5 bg-blue-500/10 border border-blue-500/20 text-blue-500 rounded-lg shrink-0">
+                      <Cpu className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-xs text-text-primary block">VM - Uso de CPU</span>
+                      <span className="text-[10px] text-text-secondary mt-0.5 leading-normal block">Gráfico circular de CPU e vCPUs alocadas.</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => handleAddWidget("pinned_vm_ram")}
+                    className="flex items-start gap-2.5 p-3.5 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
+                  >
+                    <div className="p-1.5 bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 rounded-lg shrink-0">
+                      <Database className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-xs text-text-primary block">VM - Uso de RAM</span>
+                      <span className="text-[10px] text-text-secondary mt-0.5 leading-normal block">Uso de memória da VM e limite estabelecido.</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => handleAddWidget("pinned_vm_network")}
+                    className="flex items-start gap-2.5 p-3.5 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
+                  >
+                    <div className="p-1.5 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-lg shrink-0">
+                      <Activity className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-xs text-text-primary block">VM - Rede (In/Out)</span>
+                      <span className="text-[10px] text-text-secondary mt-0.5 leading-normal block">Taxa de tráfego de entrada e saída.</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => handleAddWidget("pinned_vm_disk")}
+                    className="flex items-start gap-2.5 p-3.5 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
+                  >
+                    <div className="p-1.5 bg-indigo-500/10 border border-indigo-550/20 text-indigo-550 rounded-lg shrink-0">
+                      <Layers className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-xs text-text-primary block">VM - Armazenamento</span>
+                      <span className="text-[10px] text-text-secondary mt-0.5 leading-normal block">Espaço em disco consumido e total disponível.</span>
+                    </div>
+                  </button>
+
+                  <button
+                    onClick={() => handleAddWidget("pinned_vm_status")}
+                    className="flex items-start gap-2.5 p-3.5 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
+                  >
+                    <div className="p-1.5 bg-purple-500/10 border border-purple-500/20 text-purple-500 rounded-lg shrink-0">
+                      <Server className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-xs text-text-primary block">VM - Status e Info</span>
+                      <span className="text-[10px] text-text-secondary mt-0.5 leading-normal block">Nome, nó Proxmox, ID e status on/off.</span>
+                    </div>
+                  </button>
                 </div>
-                <div>
-                  <span className="font-bold text-sm text-text-primary block">Lista de VMs Ativas</span>
-                  <span className="text-[11px] text-text-secondary leading-relaxed block mt-1">Visão consolidada das instâncias atualmente ligadas e ativas.</span>
-                </div>
-              </button>
+              </div>
             </div>
 
             <div className="p-6 border-t border-border-color bg-bg-secondary/40 flex justify-end">
