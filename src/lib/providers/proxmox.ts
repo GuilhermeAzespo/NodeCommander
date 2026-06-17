@@ -237,7 +237,32 @@ export class ProxmoxProvider implements HypervisorProvider {
 
   async listVMs(): Promise<VM[]> {
     if (this.isMock) {
-      return ProxmoxProvider.mockVMs;
+      return ProxmoxProvider.mockVMs.map((vm) => {
+        const isRunning = vm.status === "RUNNING";
+        const isPaused = vm.status === "PAUSED";
+        
+        let cpuUsage = 0;
+        let memoryUsed = 0;
+        let uptime = 0;
+
+        if (isRunning) {
+          const hash = parseInt(vm.id) || 100;
+          cpuUsage = Math.round(((Math.sin(Date.now() / 5000 + hash) + 1) / 2) * 35 + 5); // 5% to 40%
+          memoryUsed = Math.round(vm.memory * (0.3 + ((Math.cos(Date.now() / 8000 + hash) + 1) / 2) * 0.4)); // 30% to 70%
+          uptime = Math.round((Date.now() - (hash * 100000)) / 1000) % 604800 + 3600;
+        } else if (isPaused) {
+          cpuUsage = 0;
+          memoryUsed = Math.round(vm.memory * 0.12);
+          uptime = 0;
+        }
+
+        return {
+          ...vm,
+          cpuUsage,
+          memoryUsed,
+          uptime,
+        };
+      });
     }
 
     try {
@@ -265,6 +290,9 @@ export class ProxmoxProvider implements HypervisorProvider {
             disk: Math.round(item.maxdisk / (1024 * 1024 * 1024)), // Bytes to GB
             ipAddress: undefined,
             node: item.node,
+            cpuUsage: item.status === "running" && typeof item.cpu === "number" ? Math.round(item.cpu * 100) : 0,
+            memoryUsed: item.status === "running" && typeof item.mem === "number" ? Math.round(item.mem / (1024 * 1024)) : 0,
+            uptime: item.status === "running" && typeof item.uptime === "number" ? item.uptime : 0,
           };
         });
       }
@@ -287,6 +315,9 @@ export class ProxmoxProvider implements HypervisorProvider {
           disk: Math.round(item.maxdisk / (1024 * 1024 * 1024)), // Bytes to GB
           ipAddress: undefined,
           node: this.nodeName,
+          cpuUsage: item.status === "running" && typeof item.cpu === "number" ? Math.round(item.cpu * 100) : 0,
+          memoryUsed: item.status === "running" && typeof item.mem === "number" ? Math.round(item.mem / (1024 * 1024)) : 0,
+          uptime: item.status === "running" && typeof item.uptime === "number" ? item.uptime : 0,
         };
       });
 

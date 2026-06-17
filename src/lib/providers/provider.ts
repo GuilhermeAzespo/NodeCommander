@@ -7,6 +7,9 @@ export interface VM {
   disk: number;     // GB (Disco)
   ipAddress?: string;
   node?: string;
+  cpuUsage?: number;   // % (0-100)
+  memoryUsed?: number; // MB
+  uptime?: number;     // segundos
 }
 
 export interface HostMetrics {

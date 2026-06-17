@@ -10,7 +10,8 @@ import {
   Mail, 
   LogOut, 
   Terminal,
-  RefreshCw
+  RefreshCw,
+  Activity
 } from "lucide-react";
 import ActiveLink from "./ActiveLink";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -69,6 +70,11 @@ export default async function DashboardLayout({
           <ActiveLink href="/dashboard/vms">
             <Cpu className="w-5 h-5" />
             <span>Máquinas Virtuais</span>
+          </ActiveLink>
+
+          <ActiveLink href="/dashboard/monitoring">
+            <Activity className="w-5 h-5" />
+            <span>Monitoramento</span>
           </ActiveLink>
 
           <ActiveLink href="/dashboard/hypervisors">

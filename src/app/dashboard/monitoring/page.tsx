@@ -1,0 +1,890 @@
+"use client";
+
+import React, { useState, useEffect } from "react";
+import { 
+  Activity, 
+  Cpu, 
+  Layers, 
+  Plus, 
+  Trash2, 
+  Settings, 
+  Save, 
+  RotateCcw, 
+  ArrowLeft, 
+  ArrowRight, 
+  Maximize2, 
+  Minimize2, 
+  Server, 
+  TrendingUp, 
+  CheckCircle, 
+  XCircle, 
+  AlertCircle, 
+  Clock, 
+  Eye, 
+  Database,
+  ExternalLink,
+  ChevronRight
+} from "lucide-react";
+
+interface VM {
+  id: string;
+  name: string;
+  status: "RUNNING" | "STOPPED" | "PAUSED" | "UNKNOWN";
+  cpu: number;
+  memory: number;
+  disk: number;
+  ipAddress?: string;
+  node?: string;
+  cpuUsage?: number;
+  memoryUsed?: number;
+  uptime?: number;
+  hypervisorId: string;
+  hypervisorName: string;
+  userAccess: string;
+}
+
+interface Widget {
+  id: string;
+  type: "vm_status" | "total_cpu" | "total_ram" | "top_cpu" | "top_ram" | "pinned_vm" | "running_list";
+  title: string;
+  w: number; // Column span: 1, 2, or 3
+  config?: {
+    vmId?: string;
+  };
+}
+
+const DEFAULT_WIDGETS: Widget[] = [
+  { id: "w1", type: "total_cpu", title: "Média de Uso de CPU", w: 1 },
+  { id: "w2", type: "total_ram", title: "Média de Uso de RAM", w: 1 },
+  { id: "w3", type: "vm_status", title: "Divisão de Status das VMs", w: 1 },
+  { id: "w4", type: "top_cpu", title: "Top VMs por Uso de CPU", w: 2 },
+  { id: "w5", type: "top_ram", title: "Top VMs por Uso de Memória", w: 1 },
+  { id: "w6", type: "running_list", title: "Painel de VMs Ativas", w: 3 }
+];
+
+export default function MonitoringPage() {
+  const [vms, setVms] = useState<VM[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "realtime">("dashboard");
+  
+  // Custom Dashboard builder states
+  const [widgets, setWidgets] = useState<Widget[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [addWidgetModalOpen, setAddWidgetModalOpen] = useState(false);
+  const [widgetToConfigure, setWidgetToConfigure] = useState<Widget | null>(null);
+
+  // Fetch VM metrics
+  const fetchMetrics = async () => {
+    try {
+      const res = await fetch("/api/monitoring/vms");
+      const data = await res.json();
+      if (res.ok) {
+        setVms(data.vms || []);
+        setError("");
+      } else {
+        setError(data.error || "Erro ao consultar métricas.");
+      }
+    } catch (err) {
+      setError("Erro ao carregar métricas de monitoramento.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Poll metrics every 4 seconds in real-time
+  useEffect(() => {
+    fetchMetrics();
+    const interval = setInterval(fetchMetrics, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Load widgets from localStorage or use defaults
+  useEffect(() => {
+    const saved = localStorage.getItem("nodecommander_custom_widgets");
+    if (saved) {
+      try {
+        setWidgets(JSON.parse(saved));
+      } catch (e) {
+        setWidgets(DEFAULT_WIDGETS);
+      }
+    } else {
+      setWidgets(DEFAULT_WIDGETS);
+    }
+  }, []);
+
+  // Save layout
+  const saveLayout = (updatedWidgets: Widget[]) => {
+    setWidgets(updatedWidgets);
+    localStorage.setItem("nodecommander_custom_widgets", JSON.stringify(updatedWidgets));
+  };
+
+  const handleResetLayout = () => {
+    if (confirm("Deseja restaurar o layout padrão do dashboard?")) {
+      saveLayout(DEFAULT_WIDGETS);
+      setIsEditing(false);
+    }
+  };
+
+  const handleAddWidget = (type: Widget["type"]) => {
+    const titleMap: Record<Widget["type"], string> = {
+      vm_status: "Divisão de Status das VMs",
+      total_cpu: "Média de Uso de CPU",
+      total_ram: "Média de Uso de RAM",
+      top_cpu: "Top VMs por CPU",
+      top_ram: "Top VMs por Uso de Memória",
+      pinned_vm: "Destaque de VM específica",
+      running_list: "Painel de VMs Ativas"
+    };
+
+    const newWidget: Widget = {
+      id: `w_${Date.now()}`,
+      type,
+      title: titleMap[type],
+      w: type === "running_list" ? 3 : type === "top_cpu" ? 2 : 1
+    };
+
+    const updated = [...widgets, newWidget];
+    saveLayout(updated);
+    setAddWidgetModalOpen(false);
+  };
+
+  const handleDeleteWidget = (id: string) => {
+    const updated = widgets.filter(w => w.id !== id);
+    saveLayout(updated);
+  };
+
+  const handleMoveWidget = (index: number, direction: "left" | "right") => {
+    const updated = [...widgets];
+    const targetIndex = direction === "left" ? index - 1 : index + 1;
+    if (targetIndex >= 0 && targetIndex < updated.length) {
+      const temp = updated[index];
+      updated[index] = updated[targetIndex];
+      updated[targetIndex] = temp;
+      saveLayout(updated);
+    }
+  };
+
+  const handleResizeWidget = (index: number, action: "grow" | "shrink") => {
+    const updated = [...widgets];
+    const currentW = updated[index].w;
+    if (action === "grow" && currentW < 3) {
+      updated[index].w = currentW + 1;
+    } else if (action === "shrink" && currentW > 1) {
+      updated[index].w = currentW - 1;
+    }
+    saveLayout(updated);
+  };
+
+  const handleConfigureWidget = (widget: Widget, vmId: string) => {
+    const updated = widgets.map(w => {
+      if (w.id === widget.id) {
+        return {
+          ...w,
+          config: { ...w.config, vmId }
+        };
+      }
+      return w;
+    });
+    saveLayout(updated);
+    setWidgetToConfigure(null);
+  };
+
+  // Helper calculations for widgets
+  const runningVMs = vms.filter(v => v.status === "RUNNING");
+  const pausedVMs = vms.filter(v => v.status === "PAUSED");
+  const stoppedVMs = vms.filter(v => v.status === "STOPPED");
+
+  const averageCpu = runningVMs.length > 0
+    ? Math.round(runningVMs.reduce((sum, v) => sum + (v.cpuUsage || 0), 0) / runningVMs.length)
+    : 0;
+
+  const totalAllocatedRam = runningVMs.reduce((sum, v) => sum + v.memory, 0);
+  const totalUsedRam = runningVMs.reduce((sum, v) => sum + (v.memoryUsed || 0), 0);
+  const averageRamPercent = totalAllocatedRam > 0
+    ? Math.round((totalUsedRam / totalAllocatedRam) * 100)
+    : 0;
+
+  const topCpuVMs = [...vms]
+    .filter(v => v.status === "RUNNING")
+    .sort((a, b) => (b.cpuUsage || 0) - (a.cpuUsage || 0))
+    .slice(0, 5);
+
+  const topRamVMs = [...vms]
+    .filter(v => v.status === "RUNNING")
+    .sort((a, b) => (b.memoryUsed || 0) - (a.memoryUsed || 0))
+    .slice(0, 5);
+
+  const formatUptime = (seconds?: number): string => {
+    if (!seconds || seconds <= 0) return "0m";
+    const d = Math.floor(seconds / 86400);
+    const h = Math.floor((seconds % 86400) / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const parts = [];
+    if (d > 0) parts.push(`${d}d`);
+    if (h > 0) parts.push(`${h}h`);
+    if (m > 0 || (d === 0 && h === 0)) parts.push(`${m}m`);
+    return parts.join(" ");
+  };
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-extrabold text-text-primary tracking-tight">Monitoramento Real-Time</h1>
+          <p className="text-text-secondary mt-1">Consumo agregado de recursos e painéis customizados.</p>
+        </div>
+
+        {/* Tab Switcher */}
+        <div className="flex bg-bg-secondary p-1 rounded-xl border border-border-color shrink-0 self-start sm:self-auto">
+          <button
+            onClick={() => setActiveTab("dashboard")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-xs transition-colors cursor-pointer ${
+              activeTab === "dashboard"
+                ? "bg-blue-600 text-white shadow-md shadow-blue-600/10"
+                : "text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>Dashboard Customizado</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("realtime")}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-xs transition-colors cursor-pointer ${
+              activeTab === "realtime"
+                ? "bg-blue-600 text-white shadow-md shadow-blue-600/10"
+                : "text-text-secondary hover:text-text-primary"
+            }`}
+          >
+            <Activity className="w-4 h-4" />
+            <span>VMs em Detalhes</span>
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-xl flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-20 gap-3">
+          <Activity className="w-10 h-10 animate-pulse text-blue-500" />
+          <span className="text-sm text-text-secondary font-medium">Coletando telemetria das instâncias...</span>
+        </div>
+      ) : activeTab === "realtime" ? (
+        /* TAB 2: DETALHES EM TEMPO REAL */
+        <div className="bg-bg-secondary border border-border-color rounded-2xl flex flex-col overflow-hidden">
+          <div className="p-6 border-b border-border-color">
+            <h2 className="font-bold text-text-primary text-lg">Métricas Ativas por VM</h2>
+            <p className="text-text-muted text-xs mt-0.5">Uso de hardware em tempo real para instâncias ligadas.</p>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="text-[10px] uppercase font-bold text-text-secondary tracking-wider bg-bg-primary/45 border-b border-border-color">
+                <tr>
+                  <th className="px-6 py-4">VM ID</th>
+                  <th className="px-6 py-4">Nome</th>
+                  <th className="px-6 py-4">Hipervisor</th>
+                  <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4 text-center">Uso de CPU</th>
+                  <th className="px-6 py-4 text-center">Memória Usada</th>
+                  <th className="px-6 py-4 text-center">Tempo Ativa</th>
+                  <th className="px-6 py-4">Endereço IP</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-color">
+                {vms.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} className="px-6 py-12 text-center text-text-muted italic">
+                      Nenhuma máquina virtual encontrada nos hipervisores ativos.
+                    </td>
+                  </tr>
+                ) : (
+                  vms.map((vm) => {
+                    const isRunning = vm.status === "RUNNING";
+                    return (
+                      <tr key={`${vm.hypervisorId}-${vm.id}`} className="hover:bg-bg-tertiary/20 transition-colors">
+                        <td className="px-6 py-4 text-xs font-mono text-text-secondary">{vm.id}</td>
+                        <td className="px-6 py-4 font-bold text-text-primary">{vm.name}</td>
+                        <td className="px-6 py-4 text-xs text-text-secondary">
+                          <span className="inline-flex items-center gap-1.5">
+                            <Server className="w-3.5 h-3.5 text-text-muted" />
+                            {vm.hypervisorName}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
+                            vm.status === "RUNNING"
+                              ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                              : vm.status === "STOPPED"
+                              ? "bg-bg-tertiary text-text-secondary border-border-color"
+                              : vm.status === "PAUSED"
+                              ? "bg-amber-500/10 text-amber-500 border-amber-500/20"
+                              : "bg-red-500/10 text-red-550 border-red-500/20"
+                          }`}>
+                            {vm.status}
+                          </span>
+                        </td>
+                        {/* CPU usage progress bar */}
+                        <td className="px-6 py-4 text-center whitespace-nowrap min-w-[150px]">
+                          {isRunning ? (
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="text-xs font-semibold text-text-primary">{vm.cpuUsage || 0}%</span>
+                              <div className="w-24 bg-bg-primary h-2 rounded-full overflow-hidden border border-border-color">
+                                <div 
+                                  className={`h-full rounded-full transition-all duration-500 ${
+                                    (vm.cpuUsage || 0) > 75 ? "bg-red-500" : (vm.cpuUsage || 0) > 50 ? "bg-amber-500" : "bg-emerald-500"
+                                  }`} 
+                                  style={{ width: `${vm.cpuUsage || 0}%` }}
+                                ></div>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-text-muted text-xs italic">-</span>
+                          )}
+                        </td>
+                        {/* RAM usage progress bar */}
+                        <td className="px-6 py-4 text-center whitespace-nowrap min-w-[150px]">
+                          {isRunning ? (
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="text-xs font-semibold text-text-primary">
+                                {vm.memoryUsed || 0} MB <span className="text-text-muted font-normal">/ {vm.memory} MB</span>
+                              </span>
+                              <div className="w-24 bg-bg-primary h-2 rounded-full overflow-hidden border border-border-color">
+                                <div 
+                                  className="bg-blue-500 h-full rounded-full transition-all duration-500" 
+                                  style={{ width: `${Math.round(((vm.memoryUsed || 0) / vm.memory) * 100)}%` }}
+                                ></div>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-text-muted text-xs italic">-</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-center font-medium text-xs text-text-secondary whitespace-nowrap">
+                          {isRunning ? (
+                            <span className="inline-flex items-center gap-1.5">
+                              <Clock className="w-3.5 h-3.5 text-text-muted" />
+                              {formatUptime(vm.uptime)}
+                            </span>
+                          ) : (
+                            <span className="text-text-muted text-xs italic">-</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-xs font-mono text-text-secondary">
+                          {vm.ipAddress ? (
+                            <span className="text-blue-500 hover:underline inline-flex items-center gap-1 cursor-pointer">
+                              {vm.ipAddress}
+                              <ExternalLink className="w-3 h-3 text-text-muted" />
+                            </span>
+                          ) : (
+                            <span className="text-text-muted italic">n/a</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        /* TAB 1: CUSTOMIZABLE DASHBOARD */
+        <div className="space-y-6">
+          {/* Controls Bar for Dashboard layout */}
+          <div className="flex items-center justify-between p-4 bg-bg-secondary border border-border-color rounded-2xl">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-text-secondary font-medium">Layout do Painel:</span>
+              <span className="text-xs font-bold text-text-primary bg-bg-primary px-2.5 py-1 rounded-lg border border-border-color">
+                {widgets.length} Widgets Ativos
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {isEditing ? (
+                <>
+                  <button
+                    onClick={() => setAddWidgetModalOpen(true)}
+                    className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer shadow-lg shadow-blue-900/10 dark:shadow-blue-900/30"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Adicionar Widget</span>
+                  </button>
+                  <button
+                    onClick={handleResetLayout}
+                    className="flex items-center gap-1.5 bg-bg-primary hover:bg-bg-tertiary border border-border-color text-text-secondary hover:text-text-primary px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                    title="Restaurar Layout Inicial"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>Restaurar Padrão</span>
+                  </button>
+                  <button
+                    onClick={() => setIsEditing(false)}
+                    className="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer shadow-lg shadow-emerald-900/10 dark:shadow-emerald-900/30"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>Concluir</span>
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="flex items-center gap-1.5 bg-bg-secondary hover:bg-bg-tertiary border border-border-color text-text-primary px-3.5 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer hover:border-border-color/85"
+                >
+                  <Settings className="w-4 h-4 text-blue-500 animate-spin-slow" />
+                  <span>Personalizar Painel</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Dynamic Grid of Custom Widgets */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {widgets.map((widget, index) => {
+              // Calculate width CSS classes based on widget.w span
+              let gridSpan = "col-span-1";
+              if (widget.w === 2) gridSpan = "col-span-1 lg:col-span-2";
+              if (widget.w === 3) gridSpan = "col-span-1 lg:col-span-3";
+
+              return (
+                <div 
+                  key={widget.id} 
+                  className={`bg-bg-secondary border rounded-2xl flex flex-col overflow-hidden transition-all duration-300 ${gridSpan} ${
+                    isEditing 
+                      ? "border-dashed border-blue-500/50 ring-2 ring-blue-500/5 bg-blue-500/[0.01]" 
+                      : "border-border-color hover:border-border-color/80"
+                  }`}
+                >
+                  {/* Widget Header */}
+                  <div className="p-4 border-b border-border-color flex items-center justify-between bg-bg-secondary/40">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1 bg-blue-500/10 border border-blue-500/20 text-blue-500 rounded-lg">
+                        {widget.type === "total_cpu" ? (
+                          <Cpu className="w-4 h-4" />
+                        ) : widget.type === "total_ram" ? (
+                          <Database className="w-4 h-4" />
+                        ) : widget.type === "vm_status" ? (
+                          <Layers className="w-4 h-4" />
+                        ) : widget.type === "running_list" ? (
+                          <Activity className="w-4 h-4" />
+                        ) : (
+                          <TrendingUp className="w-4 h-4" />
+                        )}
+                      </div>
+                      <span className="font-bold text-text-primary text-sm tracking-wide">{widget.title}</span>
+                    </div>
+
+                    {/* Editor actions */}
+                    {isEditing && (
+                      <div className="flex items-center gap-1">
+                        {/* Move actions */}
+                        <button
+                          disabled={index === 0}
+                          onClick={() => handleMoveWidget(index, "left")}
+                          className="p-1 text-text-muted hover:text-text-primary hover:bg-bg-primary rounded transition-colors disabled:opacity-30 cursor-pointer"
+                          title="Mover para cima/esquerda"
+                        >
+                          <ArrowLeft className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          disabled={index === widgets.length - 1}
+                          onClick={() => handleMoveWidget(index, "right")}
+                          className="p-1 text-text-muted hover:text-text-primary hover:bg-bg-primary rounded transition-colors disabled:opacity-30 cursor-pointer"
+                          title="Mover para baixo/direita"
+                        >
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Resize actions */}
+                        <button
+                          disabled={widget.w === 1}
+                          onClick={() => handleResizeWidget(index, "shrink")}
+                          className="p-1 text-text-muted hover:text-text-primary hover:bg-bg-primary rounded transition-colors disabled:opacity-30 cursor-pointer"
+                          title="Diminuir largura"
+                        >
+                          <Minimize2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          disabled={widget.w === 3}
+                          onClick={() => handleResizeWidget(index, "grow")}
+                          className="p-1 text-text-muted hover:text-text-primary hover:bg-bg-primary rounded transition-colors disabled:opacity-30 cursor-pointer"
+                          title="Aumentar largura"
+                        >
+                          <Maximize2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Config action for pinned VM */}
+                        {widget.type === "pinned_vm" && (
+                          <button
+                            onClick={() => setWidgetToConfigure(widget)}
+                            className="p-1 text-blue-500 hover:text-blue-400 hover:bg-blue-500/10 rounded transition-colors cursor-pointer"
+                            title="Escolher VM Destaque"
+                          >
+                            <Settings className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+
+                        {/* Delete action */}
+                        <button
+                          onClick={() => handleDeleteWidget(widget.id)}
+                          className="p-1 text-red-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors cursor-pointer ml-1"
+                          title="Excluir widget"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Widget Content Body */}
+                  <div className="p-5 flex-1 flex flex-col justify-center min-h-[140px] bg-bg-secondary/15">
+                    {/* Render specific widget contents */}
+                    {widget.type === "total_cpu" && (
+                      <div className="flex items-center justify-between py-2">
+                        <div className="space-y-1">
+                          <span className="text-3xl font-extrabold text-text-primary">{averageCpu}%</span>
+                          <p className="text-xs text-text-muted">Uso médio de CPU do cluster ativo</p>
+                        </div>
+                        <div className="relative w-16 h-16 flex items-center justify-center">
+                          {/* Circle progress indicator */}
+                          <svg className="w-full h-full transform -rotate-90">
+                            <circle cx="32" cy="32" r="28" className="stroke-border-color" strokeWidth="6" fill="transparent" />
+                            <circle cx="32" cy="32" r="28" className="stroke-blue-600 transition-all duration-1000" strokeWidth="6" fill="transparent" 
+                                    strokeDasharray={175} strokeDashoffset={175 - (175 * averageCpu) / 100} />
+                          </svg>
+                          <Cpu className="w-5 h-5 text-blue-500 absolute" />
+                        </div>
+                      </div>
+                    )}
+
+                    {widget.type === "total_ram" && (
+                      <div className="flex items-center justify-between py-2">
+                        <div className="space-y-1">
+                          <span className="text-3xl font-extrabold text-text-primary">{averageRamPercent}%</span>
+                          <p className="text-xs text-text-muted">
+                            {totalUsedRam >= 1024 ? `${(totalUsedRam/1024).toFixed(1)} GB` : `${totalUsedRam} MB`} de {totalAllocatedRam >= 1024 ? `${(totalAllocatedRam/1024).toFixed(1)} GB` : `${totalAllocatedRam} MB`}
+                          </p>
+                        </div>
+                        <div className="relative w-16 h-16 flex items-center justify-center">
+                          <svg className="w-full h-full transform -rotate-90">
+                            <circle cx="32" cy="32" r="28" className="stroke-border-color" strokeWidth="6" fill="transparent" />
+                            <circle cx="32" cy="32" r="28" className="stroke-indigo-500 transition-all duration-1000" strokeWidth="6" fill="transparent" 
+                                    strokeDasharray={175} strokeDashoffset={175 - (175 * averageRamPercent) / 100} />
+                          </svg>
+                          <Database className="w-5 h-5 text-indigo-500 absolute" />
+                        </div>
+                      </div>
+                    )}
+
+                    {widget.type === "vm_status" && (
+                      <div className="space-y-3 py-1">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-text-secondary font-medium">Divisão por Estado:</span>
+                          <span className="font-bold text-text-primary">{vms.length} VMs no Total</span>
+                        </div>
+                        <div className="flex h-3 bg-bg-primary rounded-full overflow-hidden border border-border-color">
+                          <div className="bg-emerald-500 transition-all duration-500" style={{ width: `${vms.length > 0 ? (runningVMs.length / vms.length) * 100 : 0}%` }} title="Ativas"></div>
+                          <div className="bg-amber-500 transition-all duration-500" style={{ width: `${vms.length > 0 ? (pausedVMs.length / vms.length) * 100 : 0}%` }} title="Pausadas"></div>
+                          <div className="bg-text-muted/50 transition-all duration-500" style={{ width: `${vms.length > 0 ? (stoppedVMs.length / vms.length) * 100 : 0}%` }} title="Desligadas"></div>
+                        </div>
+                        <div className="flex justify-between text-[10px] text-text-muted font-bold tracking-wide">
+                          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-emerald-500"></span> {runningVMs.length} Ligadas</span>
+                          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-amber-500"></span> {pausedVMs.length} Pausadas</span>
+                          <span className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-text-muted/50"></span> {stoppedVMs.length} Desligadas</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {widget.type === "top_cpu" && (
+                      <div className="space-y-2 py-1">
+                        {topCpuVMs.length === 0 ? (
+                          <p className="text-xs text-text-muted italic text-center py-4">Nenhuma VM ativa no momento.</p>
+                        ) : (
+                          topCpuVMs.map(vm => (
+                            <div key={`topcpu-${vm.hypervisorId}-${vm.id}`} className="flex items-center justify-between text-xs py-1 border-b border-border-color/40 last:border-0">
+                              <span className="font-semibold text-text-primary truncate max-w-[150px]">{vm.name}</span>
+                              <div className="flex items-center gap-2">
+                                <div className="w-20 bg-bg-primary h-1.5 rounded-full overflow-hidden border border-border-color">
+                                  <div className="bg-blue-500 h-full rounded-full" style={{ width: `${vm.cpuUsage || 0}%` }}></div>
+                                </div>
+                                <span className="font-mono text-text-secondary font-bold text-[10px] w-8 text-right">{vm.cpuUsage || 0}%</span>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+
+                    {widget.type === "top_ram" && (
+                      <div className="space-y-2 py-1">
+                        {topRamVMs.length === 0 ? (
+                          <p className="text-xs text-text-muted italic text-center py-4">Nenhuma VM ativa no momento.</p>
+                        ) : (
+                          topRamVMs.map(vm => (
+                            <div key={`topram-${vm.hypervisorId}-${vm.id}`} className="flex items-center justify-between text-xs py-1 border-b border-border-color/40 last:border-0">
+                              <span className="font-semibold text-text-primary truncate max-w-[120px]">{vm.name}</span>
+                              <span className="font-mono text-[10px] text-text-secondary font-bold">
+                                {vm.memoryUsed || 0} <span className="text-text-muted font-normal">/ {vm.memory} MB</span>
+                              </span>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+
+                    {widget.type === "pinned_vm" && (() => {
+                      const selectedVm = vms.find(v => v.id === widget.config?.vmId);
+                      if (!selectedVm) {
+                        return (
+                          <div className="flex flex-col items-center justify-center text-center py-4">
+                            <Eye className="w-7 h-7 text-text-muted mb-2" />
+                            <p className="text-xs text-text-muted">Nenhuma VM selecionada para monitoramento.</p>
+                            {isEditing && (
+                              <button
+                                onClick={() => setWidgetToConfigure(widget)}
+                                className="mt-2 text-xs text-blue-500 font-bold hover:underline"
+                              >
+                                Escolher Máquina
+                              </button>
+                            )}
+                          </div>
+                        );
+                      }
+
+                      const isRunning = selectedVm.status === "RUNNING";
+                      return (
+                        <div className="space-y-3 py-1 text-xs">
+                          <div className="flex justify-between items-center">
+                            <span className="font-bold text-text-primary">{selectedVm.name}</span>
+                            <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${
+                              isRunning ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-bg-tertiary text-text-secondary"
+                            }`}>{selectedVm.status}</span>
+                          </div>
+
+                          {isRunning ? (
+                            <div className="grid grid-cols-2 gap-3 pt-1">
+                              <div className="p-2.5 bg-bg-primary rounded-xl border border-border-color">
+                                <span className="text-[10px] text-text-secondary font-medium block">CPU</span>
+                                <span className="text-sm font-bold text-text-primary">{selectedVm.cpuUsage || 0}%</span>
+                              </div>
+                              <div className="p-2.5 bg-bg-primary rounded-xl border border-border-color">
+                                <span className="text-[10px] text-text-secondary font-medium block">RAM</span>
+                                <span className="text-sm font-bold text-text-primary">{selectedVm.memoryUsed || 0} MB</span>
+                              </div>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-text-muted italic text-center py-4">Máquina virtual está desligada.</p>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {widget.type === "running_list" && (
+                      <div className="overflow-x-auto py-1">
+                        <table className="w-full text-left text-xs">
+                          <thead>
+                            <tr className="text-[9px] uppercase font-bold text-text-muted tracking-wider border-b border-border-color">
+                              <th className="pb-2">VM</th>
+                              <th className="pb-2">Nó</th>
+                              <th className="pb-2 text-center">Uso de CPU</th>
+                              <th className="pb-2 text-center">Memória</th>
+                              <th className="pb-2 text-center">Tempo Ativa</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-border-color/45">
+                            {runningVMs.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} className="py-4 text-center text-text-muted italic">Nenhuma VM ativa detectada.</td>
+                              </tr>
+                            ) : (
+                              runningVMs.slice(0, 4).map(vm => (
+                                <tr key={`runninglist-${vm.hypervisorId}-${vm.id}`} className="hover:bg-bg-primary/30">
+                                  <td className="py-2 font-bold text-text-primary">{vm.name}</td>
+                                  <td className="py-2 text-[10px] text-text-secondary">{vm.hypervisorName}</td>
+                                  <td className="py-2 text-center">
+                                    <span className="font-bold text-text-primary">{vm.cpuUsage || 0}%</span>
+                                  </td>
+                                  <td className="py-2 text-center font-medium">
+                                    {vm.memoryUsed || 0} MB <span className="text-text-muted text-[10px]">/ {vm.memory} MB</span>
+                                  </td>
+                                  <td className="py-2 text-center text-text-secondary">
+                                    {formatUptime(vm.uptime)}
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADICIONAR WIDGET */}
+      {addWidgetModalOpen && (
+        <div className="fixed inset-0 bg-bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-bg-secondary border border-border-color rounded-2xl w-full max-w-lg shadow-2xl relative animate-scale-up overflow-hidden">
+            <div className="p-6 border-b border-border-color">
+              <h3 className="text-lg font-bold text-text-primary">Escolha um Widget</h3>
+              <p className="text-xs text-text-muted mt-0.5">Selecione o elemento para adicionar ao seu dashboard.</p>
+            </div>
+
+            <div className="p-6 grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[350px] overflow-y-auto">
+              <button
+                onClick={() => handleAddWidget("total_cpu")}
+                className="flex items-start gap-3 p-4 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
+              >
+                <div className="p-2 bg-blue-500/10 border border-blue-500/20 text-blue-500 rounded-lg mt-0.5">
+                  <Cpu className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-sm text-text-primary block">Média de CPU</span>
+                  <span className="text-[11px] text-text-secondary leading-relaxed block mt-1">Consumo agregado de CPU de todas as VMs ativas.</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleAddWidget("total_ram")}
+                className="flex items-start gap-3 p-4 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
+              >
+                <div className="p-2 bg-indigo-500/10 border border-indigo-500/20 text-indigo-500 rounded-lg mt-0.5">
+                  <Database className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-sm text-text-primary block">Média de RAM</span>
+                  <span className="text-[11px] text-text-secondary leading-relaxed block mt-1">Consumo de memória RAM agregada em tempo real.</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleAddWidget("vm_status")}
+                className="flex items-start gap-3 p-4 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
+              >
+                <div className="p-2 bg-purple-500/10 border border-purple-500/20 text-purple-500 rounded-lg mt-0.5">
+                  <Layers className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-sm text-text-primary block">Divisão de Status</span>
+                  <span className="text-[11px] text-text-secondary leading-relaxed block mt-1">Proporção e contagem de VMs ligadas, desligadas ou suspensas.</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleAddWidget("top_cpu")}
+                className="flex items-start gap-3 p-4 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
+              >
+                <div className="p-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 rounded-lg mt-0.5">
+                  <TrendingUp className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-sm text-text-primary block">Top VMs por CPU</span>
+                  <span className="text-[11px] text-text-secondary leading-relaxed block mt-1">Leaderboard das 5 VMs consumindo mais processamento.</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleAddWidget("top_ram")}
+                className="flex items-start gap-3 p-4 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
+              >
+                <div className="p-2 bg-amber-500/10 border border-amber-500/20 text-amber-500 rounded-lg mt-0.5">
+                  <TrendingUp className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-sm text-text-primary block">Top VMs por RAM</span>
+                  <span className="text-[11px] text-text-secondary leading-relaxed block mt-1">Leaderboard das 5 VMs com maior alocação/uso de memória.</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleAddWidget("pinned_vm")}
+                className="flex items-start gap-3 p-4 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors"
+              >
+                <div className="p-2 bg-blue-500/10 border border-blue-500/20 text-blue-500 rounded-lg mt-0.5">
+                  <Eye className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-sm text-text-primary block">VM Destacada</span>
+                  <span className="text-[11px] text-text-secondary leading-relaxed block mt-1">Fixa uma VM específica para monitorar telemetria exclusiva.</span>
+                </div>
+              </button>
+
+              <button
+                onClick={() => handleAddWidget("running_list")}
+                className="flex items-start gap-3 p-4 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-colors sm:col-span-2"
+              >
+                <div className="p-2 bg-pink-500/10 border border-pink-500/20 text-pink-500 rounded-lg mt-0.5">
+                  <Activity className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="font-bold text-sm text-text-primary block">Lista de VMs Ativas</span>
+                  <span className="text-[11px] text-text-secondary leading-relaxed block mt-1">Visão consolidada das instâncias atualmente ligadas e ativas.</span>
+                </div>
+              </button>
+            </div>
+
+            <div className="p-6 border-t border-border-color bg-bg-secondary/40 flex justify-end">
+              <button
+                onClick={() => setAddWidgetModalOpen(false)}
+                className="bg-bg-primary hover:bg-bg-tertiary border border-border-color text-text-secondary hover:text-text-primary px-4.5 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: SELECIONAR VM DESTAQUE */}
+      {widgetToConfigure && (
+        <div className="fixed inset-0 bg-bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-bg-secondary border border-border-color rounded-2xl w-full max-w-md shadow-2xl relative animate-scale-up overflow-hidden">
+            <div className="p-6 border-b border-border-color">
+              <h3 className="text-lg font-bold text-text-primary">Configurar Widget</h3>
+              <p className="text-xs text-text-muted mt-0.5">Selecione qual máquina virtual você deseja fixar neste widget.</p>
+            </div>
+
+            <div className="p-6 space-y-2 max-h-[300px] overflow-y-auto">
+              {vms.length === 0 ? (
+                <p className="text-xs text-text-muted italic text-center py-4">Nenhuma VM disponível.</p>
+              ) : (
+                vms.map(vm => (
+                  <button
+                    key={`config-select-${vm.hypervisorId}-${vm.id}`}
+                    onClick={() => handleConfigureWidget(widgetToConfigure, vm.id)}
+                    className="w-full flex items-center justify-between p-3 bg-bg-primary hover:bg-bg-tertiary border border-border-color rounded-xl text-left cursor-pointer transition-all hover:translate-x-0.5"
+                  >
+                    <div>
+                      <span className="font-bold text-xs text-text-primary block">{vm.name}</span>
+                      <span className="text-[10px] text-text-muted block mt-0.5">{vm.hypervisorName} &bull; ID {vm.id}</span>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-text-muted" />
+                  </button>
+                ))
+              )}
+            </div>
+
+            <div className="p-6 border-t border-border-color bg-bg-secondary/40 flex justify-end">
+              <button
+                onClick={() => setWidgetToConfigure(null)}
+                className="bg-bg-primary hover:bg-bg-tertiary border border-border-color text-text-secondary hover:text-text-primary px-4.5 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
