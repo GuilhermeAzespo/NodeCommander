@@ -137,10 +137,13 @@ export default function VMsPage() {
       const res = await fetch("/api/admin/hypervisors");
       const data = await res.json();
       if (res.ok) {
-        setHypervisors(data.hypervisors || []);
-        if (data.hypervisors?.length > 0) {
+        const activeHvs = (data.hypervisors || []).filter((h: any) => h.status !== "OFFLINE");
+        setHypervisors(activeHvs);
+        if (activeHvs.length > 0) {
           // Auto select first hypervisor
-          setSelectedHvId(data.hypervisors[0].id);
+          setSelectedHvId(activeHvs[0].id);
+        } else {
+          setSelectedHvId("");
         }
       }
     } catch (err) {
@@ -404,9 +407,13 @@ export default function VMsPage() {
       {!selectedHvId ? (
         <div className="py-20 text-center bg-bg-secondary/40 border border-border-color rounded-2xl">
           <Server className="w-12 h-12 text-text-muted mx-auto mb-4" />
-          <h3 className="text-text-primary font-bold text-lg">Nenhum hipervisor selecionado</h3>
+          <h3 className="text-text-primary font-bold text-lg">
+            {hypervisors.length === 0 ? "Nenhum hipervisor online disponível" : "Nenhum hipervisor selecionado"}
+          </h3>
           <p className="text-text-secondary text-sm mt-1 max-w-sm mx-auto">
-            Por favor, selecione um hipervisor no menu acima para carregar o painel de recursos e as máquinas virtuais.
+            {hypervisors.length === 0 
+              ? "Cadastre ou ative seus nós na aba de Hipervisores para começar a gerenciar suas máquinas virtuais." 
+              : "Por favor, selecione um hipervisor no menu acima para carregar o painel de recursos e as máquinas virtuais."}
           </p>
         </div>
       ) : loadingVms ? (
