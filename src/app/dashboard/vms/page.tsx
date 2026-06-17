@@ -115,6 +115,14 @@ export default function VMsPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [templateNameInput, setTemplateNameInput] = useState("");
   const [showSaveTemplateInput, setShowSaveTemplateInput] = useState(false);
+  const [selectedStorageForTemplate, setSelectedStorageForTemplate] = useState("");
+
+  useEffect(() => {
+    if (selectedHvForWizard && wizardOpen) {
+      fetchHvDetails(selectedHvForWizard);
+    }
+  }, [selectedHvForWizard, wizardOpen]);
+
 
 
   const handleOpenConsole = async (vm: any) => {
@@ -334,11 +342,25 @@ export default function VMsPage() {
       const parsedDisks = JSON.parse(template.disks);
       if (Array.isArray(parsedDisks)) {
         setWizardDisks(parsedDisks);
+        if (parsedDisks.length > 0) {
+          setSelectedStorageForTemplate(parsedDisks[0].storage);
+        }
       }
     } catch (e) {
       console.error("Failed to parse template disks:", e);
     }
   };
+
+  const handleStorageChangeForTemplate = (storageName: string) => {
+    setSelectedStorageForTemplate(storageName);
+    setWizardDisks((prevDisks) =>
+      prevDisks.map((disk) => ({
+        ...disk,
+        storage: storageName
+      }))
+    );
+  };
+
 
   const handleSaveAsTemplate = async () => {
     if (!templateNameInput.trim()) return;
@@ -989,76 +1011,33 @@ export default function VMsPage() {
             {/* Wizard Form */}
             <div>
               <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-                {wizardStep === 1 && (
+                {selectedTemplateId ? (
                   <div className="space-y-4">
-                    <label className="block text-text-secondary text-xs font-bold uppercase tracking-wider">
-                      Selecione o Virtualizador / Nó Destino
-                    </label>
-                    {loadingMetricsHv ? (
-                      <div className="py-12 flex flex-col items-center justify-center gap-3">
-                        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-                        <p className="text-text-secondary text-xs">Acessando nós e coletando métricas em tempo real...</p>
-                      </div>
-                    ) : metricsHvList.length === 0 ? (
-                      <div className="p-8 text-center bg-bg-primary border border-border-color rounded-xl text-text-secondary text-xs">
-                        Nenhum hipervisor configurado ou online.
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {metricsHvList.map((hv) => (
-                          <div
-                            key={hv.id}
-                            onClick={() => hv.status === "online" && setSelectedHvForWizard(hv.id)}
-                            className={`p-4 border rounded-xl cursor-pointer transition-all ${
-                              selectedHvForWizard === hv.id
-                                ? "border-blue-500 bg-blue-500/5 shadow-md shadow-blue-500/5"
-                                : "border-border-color bg-bg-primary/50 hover:bg-bg-primary"
-                            } ${hv.status !== "online" ? "opacity-50 cursor-not-allowed" : ""}`}
-                          >
-                            <div className="flex items-center justify-between mb-3">
-                              <span className="font-bold text-sm text-text-primary">{hv.name}</span>
-                              <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                hv.status === "online" 
-                                  ? "bg-emerald-500/10 text-emerald-500" 
-                                  : "bg-red-500/10 text-red-500"
-                              }`}>
-                                <span className={`w-1.5 h-1.5 rounded-full ${hv.status === "online" ? "bg-emerald-500" : "bg-red-500"}`}></span>
-                                {hv.status === "online" ? "Online" : "Offline"}
-                              </span>
-                            </div>
-                            <div className="text-[10px] text-text-secondary mb-3">{hv.type} - {hv.host}</div>
-                            
-                            {hv.status === "online" && (
-                              <div className="space-y-2">
-                                <div className="space-y-1">
-                                  <div className="flex justify-between text-[10px]">
-                                    <span className="text-text-secondary">CPU Host</span>
-                                    <span className="font-semibold text-text-primary">{hv.cpuUsage}%</span>
-                                  </div>
-                                  <div className="w-full bg-input-bg h-1.5 rounded-full overflow-hidden border border-input-border">
-                                    <div className="h-full bg-blue-500" style={{ width: `${hv.cpuUsage}%` }}></div>
-                                  </div>
-                                </div>
-                                <div className="space-y-1">
-                                  <div className="flex justify-between text-[10px]">
-                                    <span className="text-text-secondary">RAM Host</span>
-                                    <span className="font-semibold text-text-primary">{hv.memoryUsage}%</span>
-                                  </div>
-                                  <div className="w-full bg-input-bg h-1.5 rounded-full overflow-hidden border border-input-border">
-                                    <div className="h-full bg-indigo-500" style={{ width: `${hv.memoryUsage}%` }}></div>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
+                    {/* Select Hypervisor */}
+                    <div>
+                      <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Virtualizador / Hipervisor</label>
+                      {loadingMetricsHv ? (
+                        <div className="flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                          <span className="text-text-secondary text-xs">Carregando hipervisores...</span>
+                        </div>
+                      ) : (
+                        <select
+                          value={selectedHvForWizard}
+                          onChange={(e) => setSelectedHvForWizard(e.target.value)}
+                          className="w-full px-3 py-2 bg-input-bg border border-input-border rounded-xl text-text-primary text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+                        >
+                          <option value="">Selecione um Hipervisor...</option>
+                          {metricsHvList.filter(hv => hv.status === "online").map((hv) => (
+                            <option key={hv.id} value={hv.id}>
+                              {hv.name} ({hv.type})
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
 
-                {wizardStep === 2 && (
-                  <div className="space-y-4">
+                    {/* VM Name */}
                     <div>
                       <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Nome da VM</label>
                       <input
@@ -1070,36 +1049,8 @@ export default function VMsPage() {
                         className="w-full px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 text-sm transition-colors"
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">CPU Cores</label>
-                        <select
-                          value={vmCpu}
-                          onChange={(e) => setVmCpu(parseInt(e.target.value))}
-                          className="w-full px-3 py-2 bg-input-bg border border-input-border rounded-xl text-text-primary text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
-                        >
-                          <option value={1}>1 Core</option>
-                          <option value={2}>2 Cores</option>
-                          <option value={4}>4 Cores</option>
-                          <option value={8}>8 Cores</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">RAM (MB)</label>
-                        <select
-                          value={vmMemory}
-                          onChange={(e) => setVmMemory(parseInt(e.target.value))}
-                          className="w-full px-3 py-2 bg-input-bg border border-input-border rounded-xl text-text-primary text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
-                        >
-                          <option value={1024}>1 GB (1024MB)</option>
-                          <option value={2048}>2 GB (2048MB)</option>
-                          <option value={4096}>4 GB (4096MB)</option>
-                          <option value={8192}>8 GB (8192MB)</option>
-                          <option value={16384}>16 GB (16384MB)</option>
-                          <option value={32768}>32 GB (32768MB)</option>
-                        </select>
-                      </div>
-                    </div>
+
+                    {/* Target Node (Cluster) */}
                     {availableNodes.length > 0 && (
                       <div>
                         <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Nó de Destino (Cluster)</label>
@@ -1116,153 +1067,346 @@ export default function VMsPage() {
                         </select>
                       </div>
                     )}
-                    <div>
-                      <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Endereço IP (Opcional / Manual)</label>
-                      <input
-                        type="text"
-                        value={vmIpAddress}
-                        onChange={(e) => setVmIpAddress(e.target.value)}
-                        placeholder="Ex: 192.168.1.50"
-                        className="w-full px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 text-sm transition-colors"
-                      />
-                    </div>
-                  </div>
-                )}
 
-                {wizardStep === 3 && (
-                  <div className="space-y-4">
-                    <label className="block text-text-secondary text-xs font-bold uppercase tracking-wider">
-                      Selecione a Imagem de Inicialização (ISO)
-                    </label>
-                    {loadingHvDetails ? (
-                      <div className="py-12 flex flex-col items-center justify-center gap-3">
-                        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-                        <p className="text-text-secondary text-xs">Buscando ISOs disponíveis no hipervisor...</p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
+                    {/* ISO Image */}
+                    <div>
+                      <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Imagem de Inicialização (ISO)</label>
+                      {loadingHvDetails ? (
+                        <div className="flex items-center gap-2 text-text-secondary text-xs">
+                          <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                          <span>Carregando ISOs...</span>
+                        </div>
+                      ) : (
                         <select
                           value={selectedIso}
                           onChange={(e) => setSelectedIso(e.target.value)}
                           className="w-full px-3 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
                         >
-                          <option value="">Sem ISO (Iniciar com CD-ROM vazio / Sem sistema)</option>
+                          <option value="">Sem ISO (Iniciar com CD-ROM vazio)</option>
                           {availableIsos.map((iso) => (
                             <option key={iso.volid} value={iso.volid}>
                               {iso.name} ({iso.volid.split(":")[0]})
                             </option>
                           ))}
                         </select>
-                        <p className="text-[10px] text-text-secondary">
-                          As ISOs listadas acima foram indexadas dos storages ativos do virtualizador.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {wizardStep === 4 && (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <label className="block text-text-secondary text-xs font-bold uppercase tracking-wider">
-                        Configuração de Armazenamento (Discos Virtuais)
-                      </label>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const defaultStorage = availableStorages[0]?.name || "local-lvm";
-                          setWizardDisks([...wizardDisks, { storage: defaultStorage, size: 40 }]);
-                        }}
-                        className="flex items-center gap-1.5 text-xs text-blue-500 font-semibold hover:text-blue-400 cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Adicionar Disco</span>
-                      </button>
+                      )}
                     </div>
 
-                    {loadingHvDetails ? (
-                      <div className="py-12 flex flex-col items-center justify-center gap-3">
-                        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-                        <p className="text-text-secondary text-xs">Carregando storages compatíveis...</p>
+                    {/* Storage Pool (Local de Armazenamento) */}
+                    <div>
+                      <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Local de Armazenamento</label>
+                      {loadingHvDetails ? (
+                        <div className="flex items-center gap-2 text-text-secondary text-xs">
+                          <Loader2 className="w-4 h-4 text-blue-500 animate-spin" />
+                          <span>Carregando storages...</span>
+                        </div>
+                      ) : (
+                        <select
+                          value={selectedStorageForTemplate}
+                          onChange={(e) => handleStorageChangeForTemplate(e.target.value)}
+                          className="w-full px-3 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+                        >
+                          <option value="">Selecione o storage...</option>
+                          {availableStorages.map((s) => (
+                            <option key={s.name} value={s.name}>
+                              {s.name} ({s.type})
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                    </div>
+
+                    {/* Show Template Hardware Preview */}
+                    <div className="p-4 bg-bg-primary/50 border border-border-color rounded-xl space-y-2 text-xs">
+                      <div className="font-bold text-text-primary text-[10px] uppercase tracking-wider">Especificações do Template Utilizado:</div>
+                      <div className="grid grid-cols-2 gap-4 text-text-secondary">
+                        <div><span className="font-semibold text-text-muted">CPU:</span> {vmCpu} {vmCpu === 1 ? "Core" : "Cores"}</div>
+                        <div><span className="font-semibold text-text-muted">RAM:</span> {vmMemory >= 1024 ? `${vmMemory / 1024} GB` : `${vmMemory} MB`}</div>
+                        <div className="col-span-2">
+                          <span className="font-semibold text-text-muted">Discos:</span>{" "}
+                          {wizardDisks.map((d, i) => `${d.size}GB no storage ${d.storage || "não selecionado"}`).join(", ")}
+                        </div>
                       </div>
-                    ) : availableStorages.length === 0 ? (
-                      <div className="p-6 text-center bg-red-500/5 border border-red-500/10 rounded-xl text-red-400 text-xs">
-                        Aviso: Nenhum storage pool que aceite imagens de VM foi detectado no hipervisor.
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        {wizardDisks.map((disk, idx) => (
-                          <div key={idx} className="p-4 bg-bg-primary/50 border border-border-color rounded-xl flex items-end gap-4">
-                            <div className="flex-1 space-y-2">
-                              <span className="block text-[10px] font-bold text-text-secondary uppercase">
-                                Disco #{idx + 1}
-                              </span>
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <label className="block text-[10px] text-text-secondary mb-1">Destino (Storage)</label>
-                                  <select
-                                    value={disk.storage}
-                                    onChange={(e) => {
-                                      const updated = [...wizardDisks];
-                                      updated[idx].storage = e.target.value;
-                                      setWizardDisks(updated);
-                                    }}
-                                    className="w-full px-3 py-1.5 bg-input-bg border border-input-border rounded-lg text-text-primary text-xs focus:outline-none focus:border-blue-500 cursor-pointer"
-                                  >
-                                    {availableStorages.map((s) => {
-                                      const formatBytes = (bytes?: number) => {
-                                        if (bytes === undefined || bytes === null) return "";
-                                        const gb = bytes / (1024 * 1024 * 1024);
-                                        if (gb >= 1024) {
-                                          return `${(gb / 1024).toFixed(1)} TB`;
-                                        }
-                                        return `${gb.toFixed(0)} GB`;
-                                      };
-                                      const capacityText = s.avail !== undefined && s.size !== undefined
-                                        ? ` - ${formatBytes(s.avail)} livres de ${formatBytes(s.size)}`
-                                        : "";
-                                      return (
-                                        <option key={s.name} value={s.name}>
-                                          {s.name} ({s.type}){capacityText}
-                                        </option>
-                                      );
-                                    })}
-                                  </select>
-                                </div>
-                                <div>
-                                  <label className="block text-[10px] text-text-secondary mb-1">Tamanho (GB)</label>
-                                  <input
-                                    type="number"
-                                    min={1}
-                                    required
-                                    value={disk.size}
-                                    onChange={(e) => {
-                                      const updated = [...wizardDisks];
-                                      updated[idx].size = parseInt(e.target.value) || 0;
-                                      setWizardDisks(updated);
-                                    }}
-                                    className="w-full px-3 py-1.5 bg-input-bg border border-input-border rounded-lg text-text-primary text-xs focus:outline-none focus:border-blue-500"
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {wizardDisks.length > 1 && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setWizardDisks(wizardDisks.filter((_, i) => i !== idx));
-                                }}
-                                className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg cursor-pointer transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            )}
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {wizardStep === 1 && (
+                      <div className="space-y-4">
+                        <label className="block text-text-secondary text-xs font-bold uppercase tracking-wider">
+                          Selecione o Virtualizador / Nó Destino
+                        </label>
+                        {loadingMetricsHv ? (
+                          <div className="py-12 flex flex-col items-center justify-center gap-3">
+                            <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                            <p className="text-text-secondary text-xs">Acessando nós e coletando métricas em tempo real...</p>
                           </div>
-                        ))}
+                        ) : metricsHvList.length === 0 ? (
+                          <div className="p-8 text-center bg-bg-primary border border-border-color rounded-xl text-text-secondary text-xs">
+                            Nenhum hipervisor configurado ou online.
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {metricsHvList.map((hv) => (
+                              <div
+                                key={hv.id}
+                                onClick={() => hv.status === "online" && setSelectedHvForWizard(hv.id)}
+                                className={`p-4 border rounded-xl cursor-pointer transition-all ${
+                                  selectedHvForWizard === hv.id
+                                    ? "border-blue-500 bg-blue-500/5 shadow-md shadow-blue-500/5"
+                                    : "border-border-color bg-bg-primary/50 hover:bg-bg-primary"
+                                } ${hv.status !== "online" ? "opacity-50 cursor-not-allowed" : ""}`}
+                              >
+                                <div className="flex items-center justify-between mb-3">
+                                  <span className="font-bold text-sm text-text-primary">{hv.name}</span>
+                                  <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                    hv.status === "online" 
+                                      ? "bg-emerald-500/10 text-emerald-500" 
+                                      : "bg-red-500/10 text-red-500"
+                                  }`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${hv.status === "online" ? "bg-emerald-500" : "bg-red-500"}`}></span>
+                                    {hv.status === "online" ? "Online" : "Offline"}
+                                  </span>
+                                </div>
+                                <div className="text-[10px] text-text-secondary mb-3">{hv.type} - {hv.host}</div>
+                                
+                                {hv.status === "online" && (
+                                  <div className="space-y-2">
+                                    <div className="space-y-1">
+                                      <div className="flex justify-between text-[10px]">
+                                        <span className="text-text-secondary">CPU Host</span>
+                                        <span className="font-semibold text-text-primary">{hv.cpuUsage}%</span>
+                                      </div>
+                                      <div className="w-full bg-input-bg h-1.5 rounded-full overflow-hidden border border-input-border">
+                                        <div className="h-full bg-blue-500" style={{ width: `${hv.cpuUsage}%` }}></div>
+                                      </div>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <div className="flex justify-between text-[10px]">
+                                        <span className="text-text-secondary">RAM Host</span>
+                                        <span className="font-semibold text-text-primary">{hv.memoryUsage}%</span>
+                                      </div>
+                                      <div className="w-full bg-input-bg h-1.5 rounded-full overflow-hidden border border-input-border">
+                                        <div className="h-full bg-indigo-500" style={{ width: `${hv.memoryUsage}%` }}></div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
-                  </div>
+
+                    {wizardStep === 2 && (
+                      <div className="space-y-4">
+                        <div>
+                          <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Nome da VM</label>
+                          <input
+                            type="text"
+                            required
+                            value={vmName}
+                            onChange={(e) => setVmName(e.target.value)}
+                            placeholder="web-server-debian"
+                            className="w-full px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 text-sm transition-colors"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">CPU Cores</label>
+                            <select
+                              value={vmCpu}
+                              onChange={(e) => setVmCpu(parseInt(e.target.value))}
+                              className="w-full px-3 py-2 bg-input-bg border border-input-border rounded-xl text-text-primary text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+                            >
+                              <option value={1}>1 Core</option>
+                              <option value={2}>2 Cores</option>
+                              <option value={4}>4 Cores</option>
+                              <option value={8}>8 Cores</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">RAM (MB)</label>
+                            <select
+                              value={vmMemory}
+                              onChange={(e) => setVmMemory(parseInt(e.target.value))}
+                              className="w-full px-3 py-2 bg-input-bg border border-input-border rounded-xl text-text-primary text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+                            >
+                              <option value={1024}>1 GB (1024MB)</option>
+                              <option value={2048}>2 GB (2048MB)</option>
+                              <option value={4096}>4 GB (4096MB)</option>
+                              <option value={8192}>8 GB (8192MB)</option>
+                              <option value={16384}>16 GB (16384MB)</option>
+                              <option value={32768}>32 GB (32768MB)</option>
+                            </select>
+                          </div>
+                        </div>
+                        {availableNodes.length > 0 && (
+                          <div>
+                            <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Nó de Destino (Cluster)</label>
+                            <select
+                              value={selectedNodeForWizard}
+                              onChange={(e) => setSelectedNodeForWizard(e.target.value)}
+                              className="w-full px-3 py-2 bg-input-bg border border-input-border rounded-xl text-text-primary text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+                            >
+                              {availableNodes.map((node) => (
+                                <option key={node.name} value={node.name}>
+                                  {node.name} ({node.status})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                        <div>
+                          <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Endereço IP (Opcional / Manual)</label>
+                          <input
+                            type="text"
+                            value={vmIpAddress}
+                            onChange={(e) => setVmIpAddress(e.target.value)}
+                            placeholder="Ex: 192.168.1.50"
+                            className="w-full px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 text-sm transition-colors"
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {wizardStep === 3 && (
+                      <div className="space-y-4">
+                        <label className="block text-text-secondary text-xs font-bold uppercase tracking-wider">
+                          Selecione a Imagem de Inicialização (ISO)
+                        </label>
+                        {loadingHvDetails ? (
+                          <div className="py-12 flex flex-col items-center justify-center gap-3">
+                            <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                            <p className="text-text-secondary text-xs">Buscando ISOs disponíveis no hipervisor...</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <select
+                              value={selectedIso}
+                              onChange={(e) => setSelectedIso(e.target.value)}
+                              className="w-full px-3 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+                            >
+                              <option value="">Sem ISO (Iniciar com CD-ROM vazio / Sem sistema)</option>
+                              {availableIsos.map((iso) => (
+                                <option key={iso.volid} value={iso.volid}>
+                                  {iso.name} ({iso.volid.split(":")[0]})
+                                </option>
+                              ))}
+                            </select>
+                            <p className="text-[10px] text-text-secondary">
+                              As ISOs listadas acima foram indexadas dos storages ativos do virtualizador.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {wizardStep === 4 && (
+                      <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                          <label className="block text-text-secondary text-xs font-bold uppercase tracking-wider">
+                            Configuração de Armazenamento (Discos Virtuais)
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const defaultStorage = availableStorages[0]?.name || "local-lvm";
+                              setWizardDisks([...wizardDisks, { storage: defaultStorage, size: 40 }]);
+                            }}
+                            className="flex items-center gap-1.5 text-xs text-blue-500 font-semibold hover:text-blue-400 cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Adicionar Disco</span>
+                          </button>
+                        </div>
+
+                        {loadingHvDetails ? (
+                          <div className="py-12 flex flex-col items-center justify-center gap-3">
+                            <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
+                            <p className="text-text-secondary text-xs">Carregando storages compatíveis...</p>
+                          </div>
+                        ) : availableStorages.length === 0 ? (
+                          <div className="p-6 text-center bg-red-500/5 border border-red-500/10 rounded-xl text-red-400 text-xs">
+                            Aviso: Nenhum storage pool que aceite imagens de VM foi detectado no hipervisor.
+                          </div>
+                        ) : (
+                          <div className="space-y-3">
+                            {wizardDisks.map((disk, idx) => (
+                              <div key={idx} className="p-4 bg-bg-primary/50 border border-border-color rounded-xl flex items-end gap-4">
+                                <div className="flex-1 space-y-2">
+                                  <span className="block text-[10px] font-bold text-text-secondary uppercase">
+                                    Disco #{idx + 1}
+                                  </span>
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                      <label className="block text-[10px] text-text-secondary mb-1">Destino (Storage)</label>
+                                      <select
+                                        value={disk.storage}
+                                        onChange={(e) => {
+                                          const updated = [...wizardDisks];
+                                          updated[idx].storage = e.target.value;
+                                          setWizardDisks(updated);
+                                        }}
+                                        className="w-full px-3 py-1.5 bg-input-bg border border-input-border rounded-lg text-text-primary text-xs focus:outline-none focus:border-blue-500 cursor-pointer"
+                                      >
+                                        {availableStorages.map((s) => {
+                                          const formatBytes = (bytes?: number) => {
+                                            if (bytes === undefined || bytes === null) return "";
+                                            const gb = bytes / (1024 * 1024 * 1024);
+                                            if (gb >= 1024) {
+                                              return `${(gb / 1024).toFixed(1)} TB`;
+                                            }
+                                            return `${gb.toFixed(0)} GB`;
+                                          };
+                                          const capacityText = s.avail !== undefined && s.size !== undefined
+                                            ? ` - ${formatBytes(s.avail)} livres de ${formatBytes(s.size)}`
+                                            : "";
+                                          return (
+                                            <option key={s.name} value={s.name}>
+                                              {s.name} ({s.type}){capacityText}
+                                            </option>
+                                          );
+                                        })}
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="block text-[10px] text-text-secondary mb-1">Tamanho (GB)</label>
+                                      <input
+                                        type="number"
+                                        min={1}
+                                        required
+                                        value={disk.size}
+                                        onChange={(e) => {
+                                          const updated = [...wizardDisks];
+                                          updated[idx].size = parseInt(e.target.value) || 0;
+                                          setWizardDisks(updated);
+                                        }}
+                                        className="w-full px-3 py-1.5 bg-input-bg border border-input-border rounded-lg text-text-primary text-xs focus:outline-none focus:border-blue-500"
+                                      />
+                                    </div>
+                                  </div>
+                                </div>
+                                
+                                {wizardDisks.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setWizardDisks(wizardDisks.filter((_, i) => i !== idx));
+                                    }}
+                                    className="p-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg cursor-pointer transition-colors"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
 
@@ -1277,39 +1421,11 @@ export default function VMsPage() {
                 </button>
 
                 <div className="flex gap-2">
-                  {wizardStep > 1 && (
-                    <button
-                      type="button"
-                      onClick={() => setWizardStep(wizardStep - 1)}
-                      className="px-4 py-2.5 border border-border-color hover:bg-bg-tertiary text-text-secondary hover:text-text-primary rounded-xl text-xs font-semibold transition-colors cursor-pointer"
-                    >
-                      Voltar
-                    </button>
-                  )}
-
-                  {wizardStep < 4 ? (
-                    <button
-                      type="button"
-                      disabled={
-                        (wizardStep === 1 && !selectedHvForWizard) ||
-                        (wizardStep === 2 && !vmName)
-                      }
-                      onClick={() => {
-                        if (wizardStep === 1) {
-                          fetchHvDetails(selectedHvForWizard);
-                        }
-                        setWizardStep(wizardStep + 1);
-                      }}
-                      className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white rounded-xl text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>Próximo</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  ) : (
+                  {selectedTemplateId ? (
                     <button
                       type="button"
                       onClick={handleCreateVM}
-                      disabled={wizardLoading || wizardDisks.some(d => !d.storage || d.size <= 0)}
+                      disabled={wizardLoading || !vmName.trim() || !selectedHvForWizard}
                       className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
                     >
                       {wizardLoading ? (
@@ -1321,10 +1437,59 @@ export default function VMsPage() {
                         <span>Criar Máquina</span>
                       )}
                     </button>
+                  ) : (
+                    <>
+                      {wizardStep > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setWizardStep(wizardStep - 1)}
+                          className="px-4 py-2.5 border border-border-color hover:bg-bg-tertiary text-text-secondary hover:text-text-primary rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                        >
+                          Voltar
+                        </button>
+                      )}
+
+                      {wizardStep < 4 ? (
+                        <button
+                          type="button"
+                          disabled={
+                            (wizardStep === 1 && !selectedHvForWizard) ||
+                            (wizardStep === 2 && !vmName)
+                          }
+                          onClick={() => {
+                            if (wizardStep === 1) {
+                              fetchHvDetails(selectedHvForWizard);
+                            }
+                            setWizardStep(wizardStep + 1);
+                          }}
+                          className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white rounded-xl text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>Próximo</span>
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleCreateVM}
+                          disabled={wizardLoading || wizardDisks.some(d => !d.storage || d.size <= 0)}
+                          className="px-4 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                        >
+                          {wizardLoading ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Provisionando...</span>
+                            </>
+                          ) : (
+                            <span>Criar Máquina</span>
+                          )}
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
             </div>
+
           </div>
         </div>
       )}
