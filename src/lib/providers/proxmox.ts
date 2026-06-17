@@ -258,7 +258,7 @@ export class ProxmoxProvider implements HypervisorProvider {
 
           return {
             id: String(item.vmid),
-            name: item.name,
+            name: item.name || `VM ${item.vmid}`,
             status,
             cpu: item.maxcpu || 1,
             memory: Math.round(item.maxmem / (1024 * 1024)), // Bytes to MB
@@ -280,7 +280,7 @@ export class ProxmoxProvider implements HypervisorProvider {
 
         return {
           id: String(item.vmid),
-          name: item.name,
+          name: item.name || `VM ${item.vmid}`,
           status,
           cpu: item.cpus || 1,
           memory: Math.round(item.maxmem / (1024 * 1024)), // Bytes to MB

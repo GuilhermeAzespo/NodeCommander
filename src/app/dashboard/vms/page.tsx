@@ -329,7 +329,7 @@ export default function VMsPage() {
 
   const filteredVMs = vms.filter(
     (vm) =>
-      vm.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (vm.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
       vm.id.includes(searchQuery)
   );
 
@@ -520,7 +520,7 @@ export default function VMsPage() {
                         }`}
                       >
                         <td className="px-6 py-4 text-xs font-mono text-text-secondary">{vm.id}</td>
-                        <td className="px-6 py-4 text-text-primary font-bold whitespace-nowrap">{vm.name}</td>
+                        <td className="px-6 py-4 text-text-primary font-bold whitespace-nowrap">{vm.name || `VM ${vm.id}`}</td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
                             vm.status === "RUNNING"
