@@ -62,10 +62,24 @@ export default function HypervisorsPage() {
   const [credential, setCredential] = useState("");
   const [nodeName, setNodeName] = useState("pve");
   const [submitLoading, setSubmitLoading] = useState(false);
+  const [userRole, setUserRole] = useState<string>("VIEWER");
 
   useEffect(() => {
     fetchHypervisors();
+    fetchUserRole();
   }, []);
+
+  const fetchUserRole = async () => {
+    try {
+      const res = await fetch("/api/auth/me");
+      const data = await res.json();
+      if (res.ok && data.user) {
+        setUserRole(data.user.role);
+      }
+    } catch (err) {
+      console.error("Failed to fetch user role:", err);
+    }
+  };
 
   const fetchHypervisors = async () => {
     setLoading(true);
@@ -254,13 +268,15 @@ export default function HypervisorsPage() {
           <h1 className="text-3xl font-extrabold text-text-primary tracking-tight">Hipervisores</h1>
           <p className="text-text-secondary mt-1">Gerencie os nós de conexão e as configurações do Proxmox.</p>
         </div>
-        <button
-          onClick={handleOpenAddModal}
-          className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-3 rounded-xl font-medium transition-colors cursor-pointer shadow-lg shadow-blue-900/10 dark:shadow-blue-900/30 shrink-0"
-        >
-          <Plus className="w-5 h-5" />
-          <span>Novo Hipervisor</span>
-        </button>
+        {userRole === "ADMIN" && (
+          <button
+            onClick={handleOpenAddModal}
+            className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-3 rounded-xl font-medium transition-colors cursor-pointer shadow-lg shadow-blue-900/10 dark:shadow-blue-900/30 shrink-0"
+          >
+            <Plus className="w-5 h-5" />
+            <span>Novo Hipervisor</span>
+          </button>
+        )}
       </div>
 
       {/* Notices */}
@@ -290,12 +306,14 @@ export default function HypervisorsPage() {
           <p className="text-text-secondary text-sm mt-1 max-w-md mx-auto">
             Cadastre um nó de virtualizador para listar, gerenciar e criar suas máquinas virtuais no NodeCommander.
           </p>
-          <button
-            onClick={handleOpenAddModal}
-            className="mt-6 px-4 py-2 text-xs font-semibold text-blue-500 bg-blue-500/10 border border-blue-500/20 rounded-lg hover:bg-blue-500/20 transition-colors cursor-pointer"
-          >
-            Começar agora
-          </button>
+          {userRole === "ADMIN" && (
+            <button
+              onClick={handleOpenAddModal}
+              className="mt-6 px-4 py-2 text-xs font-semibold text-blue-500 bg-blue-500/10 border border-blue-500/20 rounded-lg hover:bg-blue-500/20 transition-colors cursor-pointer"
+            >
+              Começar agora
+            </button>
+          )}
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -351,49 +369,58 @@ export default function HypervisorsPage() {
               </div>
 
               {/* Actions row */}
-              <div className="flex gap-2 border-t border-border-color pt-4 mt-auto">
-                <button
-                  onClick={() => handleTestConnection(h.id)}
-                  disabled={testingId === h.id}
-                  className="flex-1 py-2 bg-bg-primary hover:bg-bg-tertiary border border-border-color text-text-secondary hover:text-text-primary rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
-                >
-                  {testingId === h.id ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
-                      <span>Testando...</span>
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="w-3.5 h-3.5" />
-                      <span>Testar Conexão</span>
-                    </>
-                  )}
-                </button>
+              {userRole === "ADMIN" ? (
+                <div className="flex gap-2 border-t border-border-color pt-4 mt-auto">
+                  <button
+                    onClick={() => handleTestConnection(h.id)}
+                    disabled={testingId === h.id}
+                    className="flex-1 py-2 bg-bg-primary hover:bg-bg-tertiary border border-border-color text-text-secondary hover:text-text-primary rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    {testingId === h.id ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-blue-500" />
+                        <span>Testando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Testar Conexão</span>
+                      </>
+                    )}
+                  </button>
 
-                <button
-                  onClick={() => handleOpenConsole(h)}
-                  title="Acessar Console noVNC"
-                  className="p-2 bg-bg-primary hover:bg-blue-500/10 border border-border-color hover:border-blue-500/30 text-text-secondary hover:text-blue-500 rounded-lg transition-colors cursor-pointer"
-                >
-                  <Terminal className="w-4 h-4" />
-                </button>
+                  <button
+                    onClick={() => handleOpenConsole(h)}
+                    title="Acessar Console noVNC"
+                    className="p-2 bg-bg-primary hover:bg-blue-500/10 border border-border-color hover:border-blue-500/30 text-text-secondary hover:text-blue-500 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <Terminal className="w-4 h-4" />
+                  </button>
 
-                <button
-                  onClick={() => handleOpenEditModal(h)}
-                  title="Editar Hipervisor"
-                  className="p-2 bg-bg-primary hover:bg-bg-tertiary border border-border-color text-text-secondary hover:text-text-primary rounded-lg transition-colors cursor-pointer"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
+                  <button
+                    onClick={() => handleOpenEditModal(h)}
+                    title="Editar Hipervisor"
+                    className="p-2 bg-bg-primary hover:bg-bg-tertiary border border-border-color text-text-secondary hover:text-text-primary rounded-lg transition-colors cursor-pointer"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
 
-                <button
-                  onClick={() => setDeleteConfirmHvId(h.id)}
-                  title="Deletar Hipervisor"
-                  className="p-2 bg-bg-primary hover:bg-red-500/10 border border-border-color hover:border-red-500/30 text-text-secondary hover:text-red-500 rounded-lg transition-colors cursor-pointer"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
+                  <button
+                    onClick={() => setDeleteConfirmHvId(h.id)}
+                    title="Deletar Hipervisor"
+                    className="p-2 bg-bg-primary hover:bg-red-500/10 border border-border-color hover:border-red-500/30 text-text-secondary hover:text-red-500 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="flex justify-center border-t border-border-color pt-4 mt-auto">
+                  <span className="text-xs text-text-muted inline-flex items-center gap-1.5 py-1">
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Visualizar</span>
+                  </span>
+                </div>
+              )}
             </div>
           ))}
         </div>

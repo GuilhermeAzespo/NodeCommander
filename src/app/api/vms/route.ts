@@ -24,6 +24,7 @@ export async function GET(req: Request) {
       );
     }
 
+    let userAccess = "FULL";
     // Check scope permissions
     if (user.role !== "ADMIN") {
       const permission = await prisma.permission.findUnique({
@@ -40,6 +41,7 @@ export async function GET(req: Request) {
           { status: 403 }
         );
       }
+      userAccess = permission.access;
     }
 
     const provider = await getProviderForHypervisor(hypervisorId);
@@ -78,7 +80,13 @@ export async function GET(req: Request) {
       };
     });
 
-    return NextResponse.json({ vms: enrichedVms, hostMetrics, nodes });
+    return NextResponse.json({ 
+      vms: enrichedVms, 
+      hostMetrics, 
+      nodes,
+      userRole: user.role,
+      userAccess
+    });
   } catch (err: any) {
     console.error("List VMs API error:", err);
     return NextResponse.json(
