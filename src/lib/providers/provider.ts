@@ -31,7 +31,7 @@ export interface HypervisorProvider {
     iso?: string | null;
     disks: { storage: string; size: number }[];
     node?: string;
-  }): Promise<boolean>;
+  }): Promise<string | boolean>;
   updateVM?(vmId: string, params: {
     name?: string;
     cpu?: number;

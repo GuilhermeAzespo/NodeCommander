@@ -62,3 +62,14 @@ model ActivityLog {
   details   String
   timestamp DateTime @default(now())
 }
+
+model VmIPOverride {
+  id           String   @id @default(uuid())
+  hypervisorId String
+  vmId         String
+  ipAddress    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([hypervisorId, vmId])
+}

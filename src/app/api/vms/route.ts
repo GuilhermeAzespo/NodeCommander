@@ -45,7 +45,7 @@ export async function GET(req: Request) {
     const provider = await getProviderForHypervisor(hypervisorId);
     
     // Fetch metrics, nodes, and VMs list in parallel
-    const [hostMetrics, vms, nodes] = await Promise.all([
+    const [hostMetrics, vms, nodes, ipOverrides] = await Promise.all([
       provider.getHostMetrics().catch(err => {
         console.error("Failed to load host metrics:", err);
         return { cpuUsage: 0, memoryUsage: 0, diskUsage: 0, uptime: 0 };
@@ -59,10 +59,26 @@ export async function GET(req: Request) {
             console.error("Failed to list nodes:", err);
             return [];
           })
-        : Promise.resolve([])
+        : Promise.resolve([]),
+      prisma.vmIPOverride.findMany({
+        where: { hypervisorId }
+      }).catch((err: any) => {
+        console.error("Failed to load VM IP overrides:", err);
+        return [];
+      })
     ]);
 
-    return NextResponse.json({ vms, hostMetrics, nodes });
+    // Map IP overrides to the VMs list
+    const overrideMap = new Map(ipOverrides.map((o: any) => [o.vmId, o.ipAddress]));
+    const enrichedVms = vms.map((vm: any) => {
+      const manualIp = overrideMap.get(vm.id);
+      return {
+        ...vm,
+        ipAddress: manualIp || vm.ipAddress
+      };
+    });
+
+    return NextResponse.json({ vms: enrichedVms, hostMetrics, nodes });
   } catch (err: any) {
     console.error("List VMs API error:", err);
     return NextResponse.json(
@@ -83,7 +99,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { hypervisorId, name, cpu, memory, disks, iso, disk, image, node } = body;
+    const { hypervisorId, name, cpu, memory, disks, iso, disk, image, node, ipAddress } = body;
 
     if (!hypervisorId || !name || !cpu || !memory) {
       return NextResponse.json(
@@ -125,7 +141,7 @@ export async function POST(req: Request) {
     }
 
     const provider = await getProviderForHypervisor(hypervisorId);
-    const success = await provider.createVM({
+    const result = await provider.createVM({
       name,
       cpu: parseInt(cpu),
       memory: parseInt(memory),
@@ -134,11 +150,31 @@ export async function POST(req: Request) {
       node
     });
 
-    if (!success) {
+    if (!result) {
       return NextResponse.json(
         { error: "O hipervisor falhou ao criar a máquina virtual." },
         { status: 500 }
       );
+    }
+
+    // Save manual IP override if specified
+    if (typeof result === "string" && ipAddress) {
+      await prisma.vmIPOverride.upsert({
+        where: {
+          hypervisorId_vmId: {
+            hypervisorId,
+            vmId: result
+          }
+        },
+        create: {
+          hypervisorId,
+          vmId: result,
+          ipAddress
+        },
+        update: {
+          ipAddress
+        }
+      });
     }
 
     const diskDetails = resolvedDisks.map((d: any) => `${d.storage}:${d.size}GB`).join(", ");

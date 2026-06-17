@@ -89,6 +89,7 @@ export default function VMsPage() {
   const [clusterNodes, setClusterNodes] = useState<any[]>([]);
   const [availableNodes, setAvailableNodes] = useState<any[]>([]);
   const [selectedNodeForWizard, setSelectedNodeForWizard] = useState("");
+  const [vmIpAddress, setVmIpAddress] = useState("");
 
   // Console States
   const [consoleModalOpen, setConsoleModalOpen] = useState(false);
@@ -103,6 +104,7 @@ export default function VMsPage() {
   const [editVmName, setEditVmName] = useState("");
   const [editVmCpu, setEditVmCpu] = useState(2);
   const [editVmMemory, setEditVmMemory] = useState(2048);
+  const [editVmIpAddress, setEditVmIpAddress] = useState("");
   const [editLoading, setEditLoading] = useState(false);
 
   const handleOpenConsole = async (vm: any) => {
@@ -245,6 +247,7 @@ export default function VMsPage() {
     setEditVmName(vm.name);
     setEditVmCpu(vm.cpu);
     setEditVmMemory(vm.memory);
+    setEditVmIpAddress(vm.ipAddress || "");
     setEditModalOpen(true);
   };
 
@@ -267,6 +270,7 @@ export default function VMsPage() {
           name: editVmName,
           cpu: editVmCpu,
           memory: editVmMemory,
+          ipAddress: editVmIpAddress,
         }),
       });
 
@@ -356,7 +360,8 @@ export default function VMsPage() {
           memory: vmMemory,
           disks: wizardDisks,
           iso: selectedIso || null,
-          node: selectedNodeForWizard || null
+          node: selectedNodeForWizard || null,
+          ipAddress: vmIpAddress || null
         })
       });
 
@@ -365,6 +370,7 @@ export default function VMsPage() {
       if (res.ok) {
         setSuccess(`Máquina virtual "${vmName}" criada com sucesso!`);
         setWizardOpen(false);
+        setVmIpAddress("");
         if (selectedHvForWizard === selectedHvId) {
           fetchVMs(selectedHvId);
         } else {
@@ -912,6 +918,16 @@ export default function VMsPage() {
                         </select>
                       </div>
                     )}
+                    <div>
+                      <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Endereço IP (Opcional / Manual)</label>
+                      <input
+                        type="text"
+                        value={vmIpAddress}
+                        onChange={(e) => setVmIpAddress(e.target.value)}
+                        placeholder="Ex: 192.168.1.50"
+                        className="w-full px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 text-sm transition-colors"
+                      />
+                    </div>
                   </div>
                 )}
 
@@ -1226,6 +1242,17 @@ export default function VMsPage() {
                       <option value={32768}>32 GB (32768MB)</option>
                     </select>
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Endereço IP (Manual / Opcional)</label>
+                  <input
+                    type="text"
+                    value={editVmIpAddress}
+                    onChange={(e) => setEditVmIpAddress(e.target.value)}
+                    placeholder="Ex: 192.168.1.50"
+                    className="w-full px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary focus:outline-none focus:border-blue-500 text-sm transition-colors"
+                  />
                 </div>
 
                 <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-[11px] text-text-secondary leading-relaxed flex items-start gap-2">

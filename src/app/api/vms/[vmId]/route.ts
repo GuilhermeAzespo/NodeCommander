@@ -149,6 +149,20 @@ export async function DELETE(
       );
     }
 
+    // Clean up any manual IP override for this VM
+    try {
+      await prisma.vmIPOverride.delete({
+        where: {
+          hypervisorId_vmId: {
+            hypervisorId,
+            vmId
+          }
+        }
+      });
+    } catch (dbErr) {
+      // Ignore if override didn't exist
+    }
+
     await prisma.activityLog.create({
       data: {
         userId: user.id,
@@ -187,7 +201,7 @@ export async function PATCH(
     }
 
     const { vmId } = await params;
-    const { hypervisorId, name, cpu, memory } = await req.json();
+    const { hypervisorId, name, cpu, memory, ipAddress } = await req.json();
 
     if (!hypervisorId) {
       return NextResponse.json(
@@ -217,20 +231,59 @@ export async function PATCH(
     }
 
     const provider = await getProviderForHypervisor(hypervisorId);
-    if (!provider.updateVM) {
-      return NextResponse.json(
-        { error: "Este provedor de hipervisor não suporta edição de hardware de VMs." },
-        { status: 400 }
-      );
+    
+    // Only invoke updateVM if name, cpu, or memory changes are requested
+    if (name !== undefined || cpu !== undefined || memory !== undefined) {
+      if (!provider.updateVM) {
+        return NextResponse.json(
+          { error: "Este provedor de hipervisor não suporta edição de hardware de VMs." },
+          { status: 400 }
+        );
+      }
+
+      const success = await provider.updateVM(vmId, { name, cpu, memory });
+
+      if (!success) {
+        return NextResponse.json(
+          { error: "O hipervisor falhou ao atualizar a configuração da máquina virtual." },
+          { status: 500 }
+        );
+      }
     }
 
-    const success = await provider.updateVM(vmId, { name, cpu, memory });
-
-    if (!success) {
-      return NextResponse.json(
-        { error: "O hipervisor falhou ao atualizar a configuração da máquina virtual." },
-        { status: 500 }
-      );
+    // Save or clear manual IP override
+    if (ipAddress !== undefined) {
+      if (ipAddress) {
+        await prisma.vmIPOverride.upsert({
+          where: {
+            hypervisorId_vmId: {
+              hypervisorId,
+              vmId
+            }
+          },
+          create: {
+            hypervisorId,
+            vmId,
+            ipAddress
+          },
+          update: {
+            ipAddress
+          }
+        });
+      } else {
+        try {
+          await prisma.vmIPOverride.delete({
+            where: {
+              hypervisorId_vmId: {
+                hypervisorId,
+                vmId
+              }
+            }
+          });
+        } catch (dbErr) {
+          // Ignore if it didn't exist
+        }
+      }
     }
 
     await prisma.activityLog.create({

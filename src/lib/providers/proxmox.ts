@@ -423,7 +423,7 @@ export class ProxmoxProvider implements HypervisorProvider {
     iso?: string | null;
     disks: { storage: string; size: number }[];
     node?: string;
-  }): Promise<boolean> {
+  }): Promise<string | boolean> {
     if (this.isMock) {
       const nextId = String(Math.max(...ProxmoxProvider.mockVMs.map((v) => parseInt(v.id))) + 1);
       const totalDisk = params.disks.reduce((acc, d) => acc + d.size, 0);
@@ -436,7 +436,7 @@ export class ProxmoxProvider implements HypervisorProvider {
         disk: totalDisk,
         node: params.node || this.nodeName,
       });
-      return true;
+      return nextId;
     }
 
     try {
@@ -482,7 +482,7 @@ export class ProxmoxProvider implements HypervisorProvider {
       }
 
       await this.request("POST", `/nodes/${node}/qemu`, body);
-      return true;
+      return String(nextId);
     } catch (err: any) {
       console.error("Proxmox createVM failed:", err);
       throw new Error(err.message || "Falha desconhecida no Proxmox.");
