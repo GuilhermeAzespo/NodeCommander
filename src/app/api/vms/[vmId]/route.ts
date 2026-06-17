@@ -172,3 +172,87 @@ export async function DELETE(
     );
   }
 }
+
+export async function PATCH(
+  req: Request,
+  { params }: { params: Promise<{ vmId: string }> }
+) {
+  try {
+    const user = await getCurrentUser();
+    if (!user) {
+      return NextResponse.json(
+        { error: "Não autenticado." },
+        { status: 401 }
+      );
+    }
+
+    const { vmId } = await params;
+    const { hypervisorId, name, cpu, memory } = await req.json();
+
+    if (!hypervisorId) {
+      return NextResponse.json(
+        { error: "O parâmetro 'hypervisorId' é obrigatório." },
+        { status: 400 }
+      );
+    }
+
+    // Check permission: Admin or Operator with FULL or CONTROL access
+    if (user.role !== "ADMIN") {
+      const permission = await prisma.permission.findUnique({
+        where: {
+          userId_hypervisorId: {
+            userId: user.id,
+            hypervisorId
+          }
+        }
+      });
+      
+      const hasAccess = permission && (permission.access === "FULL" || permission.access === "CONTROL");
+      if (!hasAccess) {
+        return NextResponse.json(
+          { error: "Acesso negado. Você precisa de permissão de nível CONTROL ou superior." },
+          { status: 403 }
+        );
+      }
+    }
+
+    const provider = await getProviderForHypervisor(hypervisorId);
+    if (!provider.updateVM) {
+      return NextResponse.json(
+        { error: "Este provedor de hipervisor não suporta edição de hardware de VMs." },
+        { status: 400 }
+      );
+    }
+
+    const success = await provider.updateVM(vmId, { name, cpu, memory });
+
+    if (!success) {
+      return NextResponse.json(
+        { error: "O hipervisor falhou ao atualizar a configuração da máquina virtual." },
+        { status: 500 }
+      );
+    }
+
+    await prisma.activityLog.create({
+      data: {
+        userId: user.id,
+        action: "UPDATE_VM_HARDWARE",
+        details: `Atualizou o hardware da VM ID ${vmId} (Nome: ${name || "sem alteração"}, CPU: ${cpu || "sem alteração"} cores, RAM: ${memory || "sem alteração"} MB).`
+      }
+    });
+
+    notifyActivity({
+      userName: user.name,
+      action: "ALTERAÇÃO DE HARDWARE VM",
+      details: `Alterou a configuração da VM ID ${vmId} (Nome: ${name || "n/a"}, CPU: ${cpu || "n/a"}, RAM: ${memory || "n/a"}).`
+    }).catch(err => console.error("Notification alert failed:", err));
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error("Update VM Hardware API error:", err);
+    return NextResponse.json(
+      { error: err.message || "Erro ao atualizar a máquina virtual." },
+      { status: 500 }
+    );
+  }
+}

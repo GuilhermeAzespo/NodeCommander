@@ -20,7 +20,8 @@ import {
   ExternalLink,
   ChevronRight,
   Sparkles,
-  Terminal
+  Terminal,
+  Settings
 } from "lucide-react";
 
 const NoVncConsole = dynamic(() => import("@/components/NoVncConsole"), { ssr: false });
@@ -92,6 +93,14 @@ export default function VMsPage() {
   const [vncProxyData, setVncProxyData] = useState<{ticket: string, port: number, apiPort: number, host: string, node: string, proxyAuthToken: string} | null>(null);
   const [vncLoading, setVncLoading] = useState(false);
   const [vncError, setVncError] = useState<string | null>(null);
+
+  // VM Edit States
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editingVm, setEditingVm] = useState<VM | null>(null);
+  const [editVmName, setEditVmName] = useState("");
+  const [editVmCpu, setEditVmCpu] = useState(2);
+  const [editVmMemory, setEditVmMemory] = useState(2048);
+  const [editLoading, setEditLoading] = useState(false);
 
   const handleOpenConsole = async (vm: any) => {
     setSelectedVmForConsole(vm);
@@ -224,6 +233,53 @@ export default function VMsPage() {
     } finally {
       setActionLoadingId(null);
       setDeleteConfirmVmId(null);
+    }
+  };
+
+  const handleOpenEditModal = (vm: VM) => {
+    setEditingVm(vm);
+    setEditVmName(vm.name);
+    setEditVmCpu(vm.cpu);
+    setEditVmMemory(vm.memory);
+    setEditModalOpen(true);
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingVm || !selectedHvId) return;
+
+    setEditLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      const res = await fetch(`/api/vms/${editingVm.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          hypervisorId: selectedHvId,
+          name: editVmName,
+          cpu: editVmCpu,
+          memory: editVmMemory,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Falha ao atualizar hardware da VM.");
+      }
+
+      setSuccess("Configurações da VM atualizadas com sucesso!");
+      setEditModalOpen(false);
+      setEditingVm(null);
+      fetchVMs(selectedHvId);
+      setTimeout(() => setSuccess(""), 4000);
+    } catch (err: any) {
+      setError(err.message || "Erro ao salvar alterações de hardware.");
+    } finally {
+      setEditLoading(false);
     }
   };
 
@@ -595,6 +651,14 @@ export default function VMsPage() {
                                   </button>
                                 </>
                               )}
+
+                              <button
+                                onClick={() => handleOpenEditModal(vm)}
+                                className="p-1.5 bg-bg-primary hover:bg-bg-tertiary border border-border-color hover:border-border-color/85 text-text-secondary hover:text-text-primary rounded-lg transition-colors cursor-pointer"
+                                title="Editar Hardware"
+                              >
+                                <Settings className="w-3.5 h-3.5" />
+                              </button>
 
                               {vm.status === "STOPPED" && (
                                 <button
@@ -993,6 +1057,115 @@ export default function VMsPage() {
                 )}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit VM Hardware Modal */}
+      {editModalOpen && editingVm && (
+        <div className="fixed inset-0 bg-bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-bg-secondary border border-border-color rounded-2xl w-full max-w-lg shadow-2xl relative animate-scale-up">
+            {/* Modal Header */}
+            <div className="p-6 border-b border-border-color flex items-center justify-between">
+              <h3 className="text-lg font-bold text-text-primary flex items-center gap-2">
+                <Settings className="w-5 h-5 text-blue-500" />
+                Editar Hardware da VM
+              </h3>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditModalOpen(false);
+                  setEditingVm(null);
+                }}
+                className="text-text-secondary hover:text-text-primary text-lg cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleSaveEdit}>
+              <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+                <div>
+                  <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Nome da VM</label>
+                  <input
+                    type="text"
+                    required
+                    value={editVmName}
+                    onChange={(e) => setEditVmName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary focus:outline-none focus:border-blue-500 text-sm transition-colors"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">CPU Cores</label>
+                    <select
+                      value={editVmCpu}
+                      onChange={(e) => setEditVmCpu(parseInt(e.target.value))}
+                      className="w-full px-3 py-2 bg-input-bg border border-input-border rounded-xl text-text-primary text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+                    >
+                      <option value={1}>1 Core</option>
+                      <option value={2}>2 Cores</option>
+                      <option value={4}>4 Cores</option>
+                      <option value={8}>8 Cores</option>
+                      <option value={16}>16 Cores</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">RAM (MB)</label>
+                    <select
+                      value={editVmMemory}
+                      onChange={(e) => setEditVmMemory(parseInt(e.target.value))}
+                      className="w-full px-3 py-2 bg-input-bg border border-input-border rounded-xl text-text-primary text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
+                    >
+                      <option value={512}>512 MB</option>
+                      <option value={1024}>1 GB (1024MB)</option>
+                      <option value={2048}>2 GB (2048MB)</option>
+                      <option value={4096}>4 GB (4096MB)</option>
+                      <option value={8192}>8 GB (8192MB)</option>
+                      <option value={16384}>16 GB (16384MB)</option>
+                      <option value={32768}>32 GB (32768MB)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-[11px] text-text-secondary leading-relaxed flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-blue-500 shrink-0 mt-0.5" />
+                  <span>
+                    <strong>Aviso de Reinicialização:</strong> Alterações de CPU e memória RAM podem requerer o reinício da máquina virtual para serem totalmente reconhecidas pelo sistema operacional convidado.
+                  </span>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 border-t border-border-color flex justify-end gap-2 bg-bg-primary/50 rounded-b-2xl">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditModalOpen(false);
+                    setEditingVm(null);
+                  }}
+                  className="px-4 py-2 border border-border-color hover:bg-bg-tertiary text-text-secondary hover:text-text-primary rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={editLoading}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-600/50 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+                >
+                  {editLoading ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Salvando...</span>
+                    </>
+                  ) : (
+                    <span>Salvar Alterações</span>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

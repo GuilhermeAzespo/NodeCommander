@@ -386,6 +386,36 @@ export class ProxmoxProvider implements HypervisorProvider {
     }
   }
 
+  async updateVM(
+    vmId: string,
+    params: { name?: string; cpu?: number; memory?: number }
+  ): Promise<boolean> {
+    if (this.isMock) {
+      const vm = ProxmoxProvider.mockVMs.find((v) => v.id === vmId);
+      if (vm) {
+        if (params.name !== undefined) vm.name = params.name;
+        if (params.cpu !== undefined) vm.cpu = params.cpu;
+        if (params.memory !== undefined) vm.memory = params.memory;
+        return true;
+      }
+      return false;
+    }
+
+    try {
+      const node = await this.resolveNodeForVM(vmId);
+      const configParams: Record<string, any> = {};
+      if (params.name !== undefined) configParams.name = params.name;
+      if (params.cpu !== undefined) configParams.cores = params.cpu;
+      if (params.memory !== undefined) configParams.memory = params.memory;
+
+      await this.request("POST", `/nodes/${node}/qemu/${vmId}/config`, configParams);
+      return true;
+    } catch (err) {
+      console.error(`Proxmox updateVM failed for ${vmId}:`, err);
+      return false;
+    }
+  }
+
   async createVM(params: {
     name: string;
     cpu: number;
