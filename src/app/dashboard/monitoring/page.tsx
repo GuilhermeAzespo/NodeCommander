@@ -16,14 +16,14 @@ import {
   Minimize2, 
   Server, 
   TrendingUp, 
-  CheckCircle, 
-  XCircle, 
   AlertCircle, 
   Clock, 
   Eye, 
   Database,
   ExternalLink,
-  ChevronRight
+  ChevronRight,
+  Edit3,
+  GripVertical
 } from "lucide-react";
 
 interface VM {
@@ -53,6 +53,12 @@ interface Widget {
   };
 }
 
+interface Dashboard {
+  id: string;
+  name: string;
+  widgets: Widget[];
+}
+
 const DEFAULT_WIDGETS: Widget[] = [
   { id: "w1", type: "total_cpu", title: "Média de Uso de CPU", w: 1 },
   { id: "w2", type: "total_ram", title: "Média de Uso de RAM", w: 1 },
@@ -68,11 +74,21 @@ export default function MonitoringPage() {
   const [error, setError] = useState("");
   const [activeTab, setActiveTab] = useState<"dashboard" | "realtime">("dashboard");
   
-  // Custom Dashboard builder states
-  const [widgets, setWidgets] = useState<Widget[]>([]);
+  // Custom Dashboards states
+  const [dashboards, setDashboards] = useState<Dashboard[]>([]);
+  const [activeDashboardId, setActiveDashboardId] = useState<string>("default");
   const [isEditing, setIsEditing] = useState(false);
   const [addWidgetModalOpen, setAddWidgetModalOpen] = useState(false);
   const [widgetToConfigure, setWidgetToConfigure] = useState<Widget | null>(null);
+
+  // Modals for dashboard manager
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [renameModalOpen, setRenameModalOpen] = useState(false);
+  const [newDashboardName, setNewDashboardName] = useState("");
+
+  // Drag and drop states
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   // Fetch VM metrics
   const fetchMetrics = async () => {
@@ -99,29 +115,104 @@ export default function MonitoringPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // Load widgets from localStorage or use defaults
+  // Load dashboards from localStorage or set defaults
   useEffect(() => {
-    const saved = localStorage.getItem("nodecommander_custom_widgets");
-    if (saved) {
+    const savedDashboards = localStorage.getItem("nodecommander_dashboards");
+    const savedActiveId = localStorage.getItem("nodecommander_active_dashboard_id");
+
+    const defaultDash: Dashboard = {
+      id: "default",
+      name: "Monitoramento Geral",
+      widgets: DEFAULT_WIDGETS
+    };
+
+    if (savedDashboards) {
       try {
-        setWidgets(JSON.parse(saved));
+        const parsed = JSON.parse(savedDashboards);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setDashboards(parsed);
+          if (savedActiveId && parsed.some(d => d.id === savedActiveId)) {
+            setActiveDashboardId(savedActiveId);
+          } else {
+            setActiveDashboardId(parsed[0].id);
+          }
+        } else {
+          setDashboards([defaultDash]);
+          setActiveDashboardId("default");
+        }
       } catch (e) {
-        setWidgets(DEFAULT_WIDGETS);
+        setDashboards([defaultDash]);
+        setActiveDashboardId("default");
       }
     } else {
-      setWidgets(DEFAULT_WIDGETS);
+      setDashboards([defaultDash]);
+      setActiveDashboardId("default");
     }
   }, []);
 
-  // Save layout
-  const saveLayout = (updatedWidgets: Widget[]) => {
-    setWidgets(updatedWidgets);
-    localStorage.setItem("nodecommander_custom_widgets", JSON.stringify(updatedWidgets));
+  const activeDashboard = dashboards.find(d => d.id === activeDashboardId) || dashboards[0] || { id: "default", name: "Monitoramento Geral", widgets: DEFAULT_WIDGETS };
+  const activeWidgets = activeDashboard.widgets;
+
+  // Save current widgets configuration
+  const updateWidgets = (updatedWidgets: Widget[]) => {
+    const updatedDashboards = dashboards.map(d => {
+      if (d.id === activeDashboardId) {
+        return { ...d, widgets: updatedWidgets };
+      }
+      return d;
+    });
+    setDashboards(updatedDashboards);
+    localStorage.setItem("nodecommander_dashboards", JSON.stringify(updatedDashboards));
+  };
+
+  const handleCreateDashboard = () => {
+    if (!newDashboardName.trim()) return;
+    const newDash: Dashboard = {
+      id: `dash_${Date.now()}`,
+      name: newDashboardName.trim(),
+      widgets: DEFAULT_WIDGETS
+    };
+    const updated = [...dashboards, newDash];
+    setDashboards(updated);
+    setActiveDashboardId(newDash.id);
+    localStorage.setItem("nodecommander_dashboards", JSON.stringify(updated));
+    localStorage.setItem("nodecommander_active_dashboard_id", newDash.id);
+    setCreateModalOpen(false);
+    setNewDashboardName("");
+  };
+
+  const handleRenameDashboard = () => {
+    if (!newDashboardName.trim() || activeDashboardId === "default") return;
+    const updated = dashboards.map(d => {
+      if (d.id === activeDashboardId) {
+        return { ...d, name: newDashboardName.trim() };
+      }
+      return d;
+    });
+    setDashboards(updated);
+    localStorage.setItem("nodecommander_dashboards", JSON.stringify(updated));
+    setRenameModalOpen(false);
+    setNewDashboardName("");
+  };
+
+  const handleDeleteDashboard = () => {
+    if (activeDashboardId === "default") {
+      alert("Não é possível excluir o painel padrão.");
+      return;
+    }
+    if (confirm(`Deseja realmente excluir o painel "${activeDashboard.name}"?`)) {
+      const updated = dashboards.filter(d => d.id !== activeDashboardId);
+      setDashboards(updated);
+      const nextActiveId = "default";
+      setActiveDashboardId(nextActiveId);
+      localStorage.setItem("nodecommander_dashboards", JSON.stringify(updated));
+      localStorage.setItem("nodecommander_active_dashboard_id", nextActiveId);
+    }
   };
 
   const handleResetLayout = () => {
-    if (confirm("Deseja restaurar o layout padrão do dashboard?")) {
-      saveLayout(DEFAULT_WIDGETS);
+    if (confirm("Deseja restaurar o layout padrão para este painel?")) {
+      updateWidgets(DEFAULT_WIDGETS);
       setIsEditing(false);
     }
   };
@@ -144,40 +235,40 @@ export default function MonitoringPage() {
       w: type === "running_list" ? 3 : type === "top_cpu" ? 2 : 1
     };
 
-    const updated = [...widgets, newWidget];
-    saveLayout(updated);
+    const updated = [...activeWidgets, newWidget];
+    updateWidgets(updated);
     setAddWidgetModalOpen(false);
   };
 
   const handleDeleteWidget = (id: string) => {
-    const updated = widgets.filter(w => w.id !== id);
-    saveLayout(updated);
+    const updated = activeWidgets.filter(w => w.id !== id);
+    updateWidgets(updated);
   };
 
   const handleMoveWidget = (index: number, direction: "left" | "right") => {
-    const updated = [...widgets];
+    const updated = [...activeWidgets];
     const targetIndex = direction === "left" ? index - 1 : index + 1;
     if (targetIndex >= 0 && targetIndex < updated.length) {
       const temp = updated[index];
       updated[index] = updated[targetIndex];
       updated[targetIndex] = temp;
-      saveLayout(updated);
+      updateWidgets(updated);
     }
   };
 
   const handleResizeWidget = (index: number, action: "grow" | "shrink") => {
-    const updated = [...widgets];
+    const updated = [...activeWidgets];
     const currentW = updated[index].w;
     if (action === "grow" && currentW < 3) {
       updated[index].w = currentW + 1;
     } else if (action === "shrink" && currentW > 1) {
       updated[index].w = currentW - 1;
     }
-    saveLayout(updated);
+    updateWidgets(updated);
   };
 
   const handleConfigureWidget = (widget: Widget, vmId: string) => {
-    const updated = widgets.map(w => {
+    const updated = activeWidgets.map(w => {
       if (w.id === widget.id) {
         return {
           ...w,
@@ -186,11 +277,47 @@ export default function MonitoringPage() {
       }
       return w;
     });
-    saveLayout(updated);
+    updateWidgets(updated);
     setWidgetToConfigure(null);
   };
 
-  // Helper calculations for widgets
+  // Drag and drop handlers
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    if (!isEditing) return;
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/html", ""); // Firefox requirement
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    if (!isEditing) return;
+    e.preventDefault();
+    if (dragOverIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetIndex: number) => {
+    if (!isEditing || draggedIndex === null) return;
+    e.preventDefault();
+    
+    if (draggedIndex !== targetIndex) {
+      const updated = [...activeWidgets];
+      const [draggedItem] = updated.splice(draggedIndex, 1);
+      updated.splice(targetIndex, 0, draggedItem);
+      updateWidgets(updated);
+    }
+    
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  // Telemetry aggregates
   const runningVMs = vms.filter(v => v.status === "RUNNING");
   const pausedVMs = vms.filter(v => v.status === "PAUSED");
   const stoppedVMs = vms.filter(v => v.status === "STOPPED");
@@ -228,7 +355,7 @@ export default function MonitoringPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 select-none">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -330,7 +457,6 @@ export default function MonitoringPage() {
                             {vm.status}
                           </span>
                         </td>
-                        {/* CPU usage progress bar */}
                         <td className="px-6 py-4 text-center whitespace-nowrap min-w-[150px]">
                           {isRunning ? (
                             <div className="flex flex-col items-center gap-1">
@@ -348,7 +474,6 @@ export default function MonitoringPage() {
                             <span className="text-text-muted text-xs italic">-</span>
                           )}
                         </td>
-                        {/* RAM usage progress bar */}
                         <td className="px-6 py-4 text-center whitespace-nowrap min-w-[150px]">
                           {isRunning ? (
                             <div className="flex flex-col items-center gap-1">
@@ -398,15 +523,64 @@ export default function MonitoringPage() {
         /* TAB 1: CUSTOMIZABLE DASHBOARD */
         <div className="space-y-6">
           {/* Controls Bar for Dashboard layout */}
-          <div className="flex items-center justify-between p-4 bg-bg-secondary border border-border-color rounded-2xl">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-text-secondary font-medium">Layout do Painel:</span>
-              <span className="text-xs font-bold text-text-primary bg-bg-primary px-2.5 py-1 rounded-lg border border-border-color">
-                {widgets.length} Widgets Ativos
-              </span>
+          <div className="flex flex-col md:flex-row md:items-center justify-between p-4 bg-bg-secondary border border-border-color rounded-2xl gap-4">
+            
+            {/* Dashboard Selector */}
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-xs text-text-secondary font-medium whitespace-nowrap">Painel:</span>
+              <div className="relative">
+                <select
+                  value={activeDashboardId}
+                  onChange={(e) => {
+                    setActiveDashboardId(e.target.value);
+                    localStorage.setItem("nodecommander_active_dashboard_id", e.target.value);
+                  }}
+                  className="bg-bg-primary border border-border-color text-text-primary text-xs font-bold px-3 py-2 rounded-xl outline-none cursor-pointer focus:border-blue-500 min-w-[200px]"
+                >
+                  {dashboards.map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Action buttons for active dashboard profile */}
+              <button
+                onClick={() => {
+                  setNewDashboardName("");
+                  setCreateModalOpen(true);
+                }}
+                className="p-2 bg-bg-primary hover:bg-bg-tertiary border border-border-color text-text-secondary hover:text-text-primary rounded-xl transition-colors cursor-pointer"
+                title="Criar Novo Painel"
+              >
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+
+              {activeDashboardId !== "default" && (
+                <>
+                  <button
+                    onClick={() => {
+                      setNewDashboardName(activeDashboard.name);
+                      setRenameModalOpen(true);
+                    }}
+                    className="p-2 bg-bg-primary hover:bg-bg-tertiary border border-border-color text-text-secondary hover:text-text-primary rounded-xl transition-colors cursor-pointer"
+                    title="Renomear Painel Ativo"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={handleDeleteDashboard}
+                    className="p-2 bg-bg-primary hover:bg-red-500/10 border border-border-color text-red-500 hover:text-red-400 rounded-xl transition-colors cursor-pointer"
+                    title="Excluir Painel Ativo"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </>
+              )}
             </div>
 
-            <div className="flex items-center gap-2">
+            {/* Layout Actions */}
+            <div className="flex items-center gap-2 self-end md:self-auto">
               {isEditing ? (
                 <>
                   <button
@@ -446,24 +620,36 @@ export default function MonitoringPage() {
 
           {/* Dynamic Grid of Custom Widgets */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {widgets.map((widget, index) => {
-              // Calculate width CSS classes based on widget.w span
+            {activeWidgets.map((widget, index) => {
               let gridSpan = "col-span-1";
               if (widget.w === 2) gridSpan = "col-span-1 lg:col-span-2";
               if (widget.w === 3) gridSpan = "col-span-1 lg:col-span-3";
 
+              const isDragged = draggedIndex === index;
+              const isOver = dragOverIndex === index && draggedIndex !== index;
+
               return (
                 <div 
                   key={widget.id} 
+                  draggable={isEditing}
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDragEnd={handleDragEnd}
+                  onDrop={(e) => handleDrop(e, index)}
                   className={`bg-bg-secondary border rounded-2xl flex flex-col overflow-hidden transition-all duration-300 ${gridSpan} ${
                     isEditing 
-                      ? "border-dashed border-blue-500/50 ring-2 ring-blue-500/5 bg-blue-500/[0.01]" 
+                      ? "border-dashed border-blue-500/50 ring-2 ring-blue-500/5 bg-blue-500/[0.01] cursor-grab active:cursor-grabbing" 
                       : "border-border-color hover:border-border-color/80"
+                  } ${isDragged ? "opacity-45 scale-[0.97] border-blue-600 bg-blue-600/5" : ""} ${
+                    isOver ? "border-emerald-500/60 ring-4 ring-emerald-500/10 scale-[1.01]" : ""
                   }`}
                 >
                   {/* Widget Header */}
                   <div className="p-4 border-b border-border-color flex items-center justify-between bg-bg-secondary/40">
                     <div className="flex items-center gap-2">
+                      {isEditing && (
+                        <GripVertical className="w-4 h-4 text-text-muted shrink-0 cursor-grab" />
+                      )}
                       <div className="p-1 bg-blue-500/10 border border-blue-500/20 text-blue-500 rounded-lg">
                         {widget.type === "total_cpu" ? (
                           <Cpu className="w-4 h-4" />
@@ -488,15 +674,15 @@ export default function MonitoringPage() {
                           disabled={index === 0}
                           onClick={() => handleMoveWidget(index, "left")}
                           className="p-1 text-text-muted hover:text-text-primary hover:bg-bg-primary rounded transition-colors disabled:opacity-30 cursor-pointer"
-                          title="Mover para cima/esquerda"
+                          title="Mover Esquerda"
                         >
                           <ArrowLeft className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          disabled={index === widgets.length - 1}
+                          disabled={index === activeWidgets.length - 1}
                           onClick={() => handleMoveWidget(index, "right")}
                           className="p-1 text-text-muted hover:text-text-primary hover:bg-bg-primary rounded transition-colors disabled:opacity-30 cursor-pointer"
-                          title="Mover para baixo/direita"
+                          title="Mover Direita"
                         >
                           <ArrowRight className="w-3.5 h-3.5" />
                         </button>
@@ -506,7 +692,7 @@ export default function MonitoringPage() {
                           disabled={widget.w === 1}
                           onClick={() => handleResizeWidget(index, "shrink")}
                           className="p-1 text-text-muted hover:text-text-primary hover:bg-bg-primary rounded transition-colors disabled:opacity-30 cursor-pointer"
-                          title="Diminuir largura"
+                          title="Diminuir"
                         >
                           <Minimize2 className="w-3.5 h-3.5" />
                         </button>
@@ -514,7 +700,7 @@ export default function MonitoringPage() {
                           disabled={widget.w === 3}
                           onClick={() => handleResizeWidget(index, "grow")}
                           className="p-1 text-text-muted hover:text-text-primary hover:bg-bg-primary rounded transition-colors disabled:opacity-30 cursor-pointer"
-                          title="Aumentar largura"
+                          title="Aumentar"
                         >
                           <Maximize2 className="w-3.5 h-3.5" />
                         </button>
@@ -544,7 +730,6 @@ export default function MonitoringPage() {
 
                   {/* Widget Content Body */}
                   <div className="p-5 flex-1 flex flex-col justify-center min-h-[140px] bg-bg-secondary/15">
-                    {/* Render specific widget contents */}
                     {widget.type === "total_cpu" && (
                       <div className="flex items-center justify-between py-2">
                         <div className="space-y-1">
@@ -552,7 +737,6 @@ export default function MonitoringPage() {
                           <p className="text-xs text-text-muted">Uso médio de CPU do cluster ativo</p>
                         </div>
                         <div className="relative w-16 h-16 flex items-center justify-center">
-                          {/* Circle progress indicator */}
                           <svg className="w-full h-full transform -rotate-90">
                             <circle cx="32" cy="32" r="28" className="stroke-border-color" strokeWidth="6" fill="transparent" />
                             <circle cx="32" cy="32" r="28" className="stroke-blue-600 transition-all duration-1000" strokeWidth="6" fill="transparent" 
@@ -643,7 +827,7 @@ export default function MonitoringPage() {
                       if (!selectedVm) {
                         return (
                           <div className="flex flex-col items-center justify-center text-center py-4">
-                            <Eye className="w-7 h-7 text-text-muted mb-2" />
+                            <Eye className="w-7 h-7 text-text-muted mb-2 animate-bounce-slow" />
                             <p className="text-xs text-text-muted">Nenhuma VM selecionada para monitoramento.</p>
                             {isEditing && (
                               <button
@@ -880,6 +1064,87 @@ export default function MonitoringPage() {
                 className="bg-bg-primary hover:bg-bg-tertiary border border-border-color text-text-secondary hover:text-text-primary px-4.5 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
               >
                 Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CRIAR DASHBOARD */}
+      {createModalOpen && (
+        <div className="fixed inset-0 bg-bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-bg-secondary border border-border-color rounded-2xl w-full max-w-sm shadow-2xl relative animate-scale-up overflow-hidden">
+            <div className="p-6 border-b border-border-color">
+              <h3 className="text-lg font-bold text-text-primary">Novo Painel</h3>
+              <p className="text-xs text-text-muted mt-0.5">Escolha um nome descritivo para seu novo painel.</p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-text-secondary">Nome do Painel</label>
+                <input
+                  type="text"
+                  placeholder="Ex: Monitorar VM de Banco"
+                  value={newDashboardName}
+                  onChange={(e) => setNewDashboardName(e.target.value)}
+                  className="w-full bg-bg-primary border border-border-color text-text-primary text-xs font-medium px-4 py-2.5 rounded-xl outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-border-color bg-bg-secondary/40 flex justify-end gap-2">
+              <button
+                onClick={() => setCreateModalOpen(false)}
+                className="bg-bg-primary hover:bg-bg-tertiary border border-border-color text-text-secondary hover:text-text-primary px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreateDashboard}
+                disabled={!newDashboardName.trim()}
+                className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors disabled:opacity-40"
+              >
+                Criar Painel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: RENOMEAR DASHBOARD */}
+      {renameModalOpen && (
+        <div className="fixed inset-0 bg-bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-bg-secondary border border-border-color rounded-2xl w-full max-w-sm shadow-2xl relative animate-scale-up overflow-hidden">
+            <div className="p-6 border-b border-border-color">
+              <h3 className="text-lg font-bold text-text-primary">Renomear Painel</h3>
+              <p className="text-xs text-text-muted mt-0.5">Insira o novo nome para o painel selecionado.</p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-text-secondary">Novo Nome</label>
+                <input
+                  type="text"
+                  value={newDashboardName}
+                  onChange={(e) => setNewDashboardName(e.target.value)}
+                  className="w-full bg-bg-primary border border-border-color text-text-primary text-xs font-medium px-4 py-2.5 rounded-xl outline-none focus:border-blue-500"
+                />
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-border-color bg-bg-secondary/40 flex justify-end gap-2">
+              <button
+                onClick={() => setRenameModalOpen(false)}
+                className="bg-bg-primary hover:bg-bg-tertiary border border-border-color text-text-secondary hover:text-text-primary px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleRenameDashboard}
+                disabled={!newDashboardName.trim()}
+                className="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors disabled:opacity-40"
+              >
+                Salvar Nome
               </button>
             </div>
           </div>
