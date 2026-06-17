@@ -30,6 +30,7 @@ export interface HypervisorProvider {
     memory: number;
     iso?: string | null;
     disks: { storage: string; size: number }[];
+    node?: string;
   }): Promise<boolean>;
   updateVM?(vmId: string, params: {
     name?: string;
@@ -37,6 +38,16 @@ export interface HypervisorProvider {
     memory?: number;
   }): Promise<boolean>;
   
+  listNodes?(): Promise<{
+    name: string;
+    status: "ONLINE" | "OFFLINE";
+    cpuUsage: number;
+    memoryUsage: number;
+    memoryTotal: number;
+    memoryUsed: number;
+    uptime: number;
+  }[]>;
+
   // Optional VNC and details methods
   listISOs?(): Promise<{ volid: string; name: string }[]>;
   listStorages?(): Promise<{ 

@@ -422,6 +422,7 @@ export class ProxmoxProvider implements HypervisorProvider {
     memory: number;
     iso?: string | null;
     disks: { storage: string; size: number }[];
+    node?: string;
   }): Promise<boolean> {
     if (this.isMock) {
       const nextId = String(Math.max(...ProxmoxProvider.mockVMs.map((v) => parseInt(v.id))) + 1);
@@ -433,6 +434,7 @@ export class ProxmoxProvider implements HypervisorProvider {
         cpu: params.cpu,
         memory: params.memory,
         disk: totalDisk,
+        node: params.node || this.nodeName,
       });
       return true;
     }
@@ -442,15 +444,17 @@ export class ProxmoxProvider implements HypervisorProvider {
       const clusterNextIdData = await this.request("GET", "/cluster/nextid");
       const nextId = clusterNextIdData || "100";
 
-      let node = this.nodeName;
-      try {
-        await this.request("GET", `/nodes/${node}/status`);
-      } catch (err) {
-        const nodesList = await this.request("GET", "/nodes");
-        if (nodesList && Array.isArray(nodesList)) {
-          const activeNode = nodesList.find((n: any) => n.status === "online");
-          if (activeNode) {
-            node = activeNode.node;
+      let node = params.node || this.nodeName;
+      if (!params.node) {
+        try {
+          await this.request("GET", `/nodes/${node}/status`);
+        } catch (err) {
+          const nodesList = await this.request("GET", "/nodes");
+          if (nodesList && Array.isArray(nodesList)) {
+            const activeNode = nodesList.find((n: any) => n.status === "online");
+            if (activeNode) {
+              node = activeNode.node;
+            }
           }
         }
       }
@@ -579,6 +583,76 @@ export class ProxmoxProvider implements HypervisorProvider {
     } catch (err) {
       console.error("Proxmox listStorages failed:", err);
       return [];
+    }
+  }
+
+  async listNodes(): Promise<{
+    name: string;
+    status: "ONLINE" | "OFFLINE";
+    cpuUsage: number;
+    memoryUsage: number;
+    memoryTotal: number;
+    memoryUsed: number;
+    uptime: number;
+  }[]> {
+    if (this.isMock) {
+      return [
+        {
+          name: this.nodeName,
+          status: "ONLINE",
+          cpuUsage: 12,
+          memoryUsage: 45,
+          memoryTotal: 32768,
+          memoryUsed: 14745,
+          uptime: 86400,
+        },
+        {
+          name: `${this.nodeName}-node-2`,
+          status: "ONLINE",
+          cpuUsage: 25,
+          memoryUsage: 60,
+          memoryTotal: 16384,
+          memoryUsed: 9830,
+          uptime: 124800,
+        }
+      ];
+    }
+
+    try {
+      const nodesData = await this.request("GET", "/nodes");
+      if (!nodesData || !Array.isArray(nodesData)) {
+        return [];
+      }
+
+      return nodesData.map((node: any) => {
+        const cpuUsage = Math.round((node.cpu || 0) * 100);
+        const maxMem = node.maxmem || 1;
+        const usedMem = node.mem || 0;
+        const memoryUsage = Math.round((usedMem / maxMem) * 100);
+
+        return {
+          name: node.node,
+          status: node.status === "online" ? "ONLINE" : "OFFLINE",
+          cpuUsage,
+          memoryUsage,
+          memoryTotal: Math.round(maxMem / (1024 * 1024)),
+          memoryUsed: Math.round(usedMem / (1024 * 1024)),
+          uptime: node.uptime || 0,
+        };
+      });
+    } catch (err) {
+      console.error("Proxmox listNodes failed:", err);
+      return [
+        {
+          name: this.nodeName,
+          status: "ONLINE",
+          cpuUsage: 0,
+          memoryUsage: 0,
+          memoryTotal: 0,
+          memoryUsed: 0,
+          uptime: 0,
+        }
+      ];
     }
   }
 

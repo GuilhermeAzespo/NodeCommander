@@ -43,8 +43,8 @@ export async function GET(req: Request) {
 
     const provider = await getProviderForHypervisor(hypervisorId);
 
-    // Call optional methods listISOs and listStorages safely in parallel
-    const [isos, storages] = await Promise.all([
+    // Call optional methods listISOs, listStorages and listNodes safely in parallel
+    const [isos, storages, nodes] = await Promise.all([
       typeof provider.listISOs === "function"
         ? provider.listISOs().catch((err) => {
             console.error("Failed to list ISOs:", err);
@@ -57,9 +57,15 @@ export async function GET(req: Request) {
             return [];
           })
         : Promise.resolve([]),
+      typeof provider.listNodes === "function"
+        ? provider.listNodes().catch((err) => {
+            console.error("Failed to list nodes:", err);
+            return [];
+          })
+        : Promise.resolve([]),
     ]);
 
-    return NextResponse.json({ isos, storages });
+    return NextResponse.json({ isos, storages, nodes });
   } catch (err: any) {
     console.error("Hypervisor details API error:", err);
     return NextResponse.json(

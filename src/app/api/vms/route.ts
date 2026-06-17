@@ -44,8 +44,8 @@ export async function GET(req: Request) {
 
     const provider = await getProviderForHypervisor(hypervisorId);
     
-    // Fetch metrics and VMs list in parallel
-    const [hostMetrics, vms] = await Promise.all([
+    // Fetch metrics, nodes, and VMs list in parallel
+    const [hostMetrics, vms, nodes] = await Promise.all([
       provider.getHostMetrics().catch(err => {
         console.error("Failed to load host metrics:", err);
         return { cpuUsage: 0, memoryUsage: 0, diskUsage: 0, uptime: 0 };
@@ -53,10 +53,16 @@ export async function GET(req: Request) {
       provider.listVMs().catch(err => {
         console.error("Failed to list VMs:", err);
         return [];
-      })
+      }),
+      typeof provider.listNodes === "function"
+        ? provider.listNodes().catch(err => {
+            console.error("Failed to list nodes:", err);
+            return [];
+          })
+        : Promise.resolve([])
     ]);
 
-    return NextResponse.json({ vms, hostMetrics });
+    return NextResponse.json({ vms, hostMetrics, nodes });
   } catch (err: any) {
     console.error("List VMs API error:", err);
     return NextResponse.json(
@@ -77,7 +83,7 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { hypervisorId, name, cpu, memory, disks, iso, disk, image } = body;
+    const { hypervisorId, name, cpu, memory, disks, iso, disk, image, node } = body;
 
     if (!hypervisorId || !name || !cpu || !memory) {
       return NextResponse.json(
@@ -124,7 +130,8 @@ export async function POST(req: Request) {
       cpu: parseInt(cpu),
       memory: parseInt(memory),
       iso: resolvedIso,
-      disks: resolvedDisks
+      disks: resolvedDisks,
+      node
     });
 
     if (!success) {
