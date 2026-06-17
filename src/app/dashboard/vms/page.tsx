@@ -110,6 +110,13 @@ export default function VMsPage() {
   const [editVmIpAddress, setEditVmIpAddress] = useState("");
   const [editLoading, setEditLoading] = useState(false);
 
+  // Template States
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [templateNameInput, setTemplateNameInput] = useState("");
+  const [showSaveTemplateInput, setShowSaveTemplateInput] = useState(false);
+
+
   const handleOpenConsole = async (vm: any) => {
     setSelectedVmForConsole(vm);
     setConsoleModalOpen(true);
@@ -296,13 +303,112 @@ export default function VMsPage() {
     }
   };
 
+  const fetchTemplates = async () => {
+    try {
+      const res = await fetch("/api/vms/templates");
+      const data = await res.json();
+      if (res.ok) {
+        setTemplates(data.templates || []);
+      }
+    } catch (err) {
+      console.error("Failed to load VM templates:", err);
+    }
+  };
+
+  const handleApplyTemplate = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    if (!templateId) return;
+
+    const template = templates.find((t) => t.id === templateId);
+    if (!template) return;
+
+    setVmCpu(template.cpu);
+    setVmMemory(template.memory);
+    if (template.node) {
+      setSelectedNodeForWizard(template.node);
+    }
+    if (template.iso) {
+      setSelectedIso(template.iso);
+    }
+    try {
+      const parsedDisks = JSON.parse(template.disks);
+      if (Array.isArray(parsedDisks)) {
+        setWizardDisks(parsedDisks);
+      }
+    } catch (e) {
+      console.error("Failed to parse template disks:", e);
+    }
+  };
+
+  const handleSaveAsTemplate = async () => {
+    if (!templateNameInput.trim()) return;
+    try {
+      const res = await fetch("/api/vms/templates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: templateNameInput.trim(),
+          cpu: vmCpu,
+          memory: vmMemory,
+          disks: wizardDisks,
+          iso: selectedIso || null,
+          node: selectedNodeForWizard || null
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setTemplateNameInput("");
+        setShowSaveTemplateInput(false);
+        // Refresh templates list
+        const refreshedRes = await fetch("/api/vms/templates");
+        const refreshedData = await refreshedRes.json();
+        if (refreshedRes.ok) {
+          const list = refreshedData.templates || [];
+          setTemplates(list);
+          const found = list.find((t: any) => t.name === data.template?.name);
+          if (found) {
+            setSelectedTemplateId(found.id);
+          }
+        }
+      } else {
+        alert(data.error || "Erro ao salvar template.");
+      }
+    } catch (err) {
+      console.error("Error saving template:", err);
+    }
+  };
+
+  const handleDeleteTemplate = async (templateId: string) => {
+    if (!confirm("Deseja realmente excluir este template?")) return;
+    try {
+      const res = await fetch(`/api/vms/templates?id=${templateId}`, {
+        method: "DELETE"
+      });
+      if (res.ok) {
+        fetchTemplates();
+        setSelectedTemplateId("");
+      } else {
+        const data = await res.json();
+        alert(data.error || "Erro ao excluir template.");
+      }
+    } catch (err) {
+      console.error("Error deleting template:", err);
+    }
+  };
+
   const openWizard = async () => {
     setVmName("");
     setWizardStep(1);
     setSelectedHvForWizard(selectedHvId || "");
     setWizardDisks([{ storage: "", size: 40 }]);
     setSelectedIso("");
+    setSelectedTemplateId("");
+    setShowSaveTemplateInput(false);
     setWizardOpen(true);
+
+    // Load VM templates
+    fetchTemplates();
+
     
     // Fetch hypervisors metrics
     setLoadingMetricsHv(true);
@@ -810,6 +916,75 @@ export default function VMsPage() {
               </div>
               <p className="text-text-secondary text-xs mt-1">Configure o novo provisionamento de recursos de forma guiada.</p>
             </div>
+
+            {/* Template Selector Bar */}
+            <div className="px-6 py-3 bg-bg-primary/45 border-b border-border-color flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                <span className="font-semibold text-text-secondary whitespace-nowrap">Usar Template:</span>
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => handleApplyTemplate(e.target.value)}
+                  className="bg-bg-secondary border border-border-color rounded-lg px-2.5 py-1 text-xs text-text-primary focus:outline-none cursor-pointer min-w-[160px]"
+                >
+                  <option value="">Nenhum (Configuração Manual)</option>
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>{t.name}</option>
+                  ))}
+                </select>
+                {selectedTemplateId && (
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteTemplate(selectedTemplateId)}
+                    className="p-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded transition-colors cursor-pointer"
+                    title="Excluir este template"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                {showSaveTemplateInput ? (
+                  <div className="flex items-center gap-1.5 animate-fade-in">
+                    <input
+                      type="text"
+                      placeholder="Nome do Template..."
+                      value={templateNameInput}
+                      onChange={(e) => setTemplateNameInput(e.target.value)}
+                      className="bg-bg-secondary border border-border-color rounded-lg px-2.5 py-1 text-xs text-text-primary outline-none max-w-[140px]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleSaveAsTemplate}
+                      disabled={!templateNameInput.trim()}
+                      className="bg-blue-600 hover:bg-blue-500 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold transition-colors disabled:opacity-40 cursor-pointer"
+                    >
+                      Salvar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowSaveTemplateInput(false)}
+                      className="text-text-secondary hover:text-text-primary px-1 font-bold cursor-pointer"
+                    >
+                      X
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTemplateNameInput("");
+                      setShowSaveTemplateInput(true);
+                    }}
+                    className="flex items-center gap-1 text-blue-500 hover:text-blue-400 font-semibold transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Salvar Configuração como Template</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
 
             {/* Wizard Form */}
             <div>

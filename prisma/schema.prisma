@@ -73,3 +73,16 @@ model VmIPOverride {
 
   @@unique([hypervisorId, vmId])
 }
+
+model VmTemplate {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  cpu         Int
+  memory      Int      // RAM em MB
+  disks       String   // Array de discos em JSON (ex: [{"storage":"local-lvm","size":40}])
+  iso         String?  // ISO opcional
+  node        String?  // Nó Proxmox opcional
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
