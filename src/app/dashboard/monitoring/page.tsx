@@ -38,6 +38,10 @@ interface VM {
   cpuUsage?: number;
   memoryUsed?: number;
   uptime?: number;
+  netIn?: number;
+  netOut?: number;
+  diskUsed?: number;
+  cpuShares?: number;
   hypervisorId: string;
   hypervisorName: string;
   userAccess: string;
@@ -317,6 +321,48 @@ export default function MonitoringPage() {
     setDragOverIndex(null);
   };
 
+  // Mouse Drag-to-Resize Handler
+  const handleResizeStart = (e: React.MouseEvent, widgetIndex: number) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const startX = e.clientX;
+    const element = e.currentTarget.parentElement;
+    if (!element) return;
+    const startWidth = element.getBoundingClientRect().width;
+    
+    const gridContainer = element.parentElement;
+    if (!gridContainer) return;
+    const gridWidth = gridContainer.getBoundingClientRect().width;
+    const colWidth = gridWidth / 3; // base 3 columns
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const newWidth = startWidth + deltaX;
+      
+      let newSpan = 1;
+      if (newWidth > colWidth * 2.2) {
+        newSpan = 3;
+      } else if (newWidth > colWidth * 1.2) {
+        newSpan = 2;
+      }
+      
+      const updated = [...activeWidgets];
+      if (updated[widgetIndex].w !== newSpan) {
+        updated[widgetIndex].w = newSpan;
+        updateWidgets(updated);
+      }
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+  };
+
   // Telemetry aggregates
   const runningVMs = vms.filter(v => v.status === "RUNNING");
   const pausedVMs = vms.filter(v => v.status === "PAUSED");
@@ -341,6 +387,17 @@ export default function MonitoringPage() {
     .filter(v => v.status === "RUNNING")
     .sort((a, b) => (b.memoryUsed || 0) - (a.memoryUsed || 0))
     .slice(0, 5);
+
+  const formatSpeed = (bytesPerSec?: number): string => {
+    if (bytesPerSec === undefined || bytesPerSec <= 0) return "0 B/s";
+    if (bytesPerSec >= 1024 * 1024) {
+      return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`;
+    }
+    if (bytesPerSec >= 1024) {
+      return `${(bytesPerSec / 1024).toFixed(0)} KB/s`;
+    }
+    return `${bytesPerSec} B/s`;
+  };
 
   const formatUptime = (seconds?: number): string => {
     if (!seconds || seconds <= 0) return "0m";
@@ -410,7 +467,7 @@ export default function MonitoringPage() {
             <p className="text-text-muted text-xs mt-0.5">Uso de hardware em tempo real para instâncias ligadas.</p>
           </div>
 
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto font-sans">
             <table className="w-full text-left text-sm">
               <thead className="text-[10px] uppercase font-bold text-text-secondary tracking-wider bg-bg-primary/45 border-b border-border-color">
                 <tr>
@@ -420,6 +477,8 @@ export default function MonitoringPage() {
                   <th className="px-6 py-4">Status</th>
                   <th className="px-6 py-4 text-center">Uso de CPU</th>
                   <th className="px-6 py-4 text-center">Memória Usada</th>
+                  <th className="px-6 py-4 text-center">Armazenamento</th>
+                  <th className="px-6 py-4 text-center">Rede (Entrada/Saída)</th>
                   <th className="px-6 py-4 text-center">Tempo Ativa</th>
                   <th className="px-6 py-4">Endereço IP</th>
                 </tr>
@@ -427,7 +486,7 @@ export default function MonitoringPage() {
               <tbody className="divide-y divide-border-color">
                 {vms.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-6 py-12 text-center text-text-muted italic">
+                    <td colSpan={10} className="px-6 py-12 text-center text-text-muted italic">
                       Nenhuma máquina virtual encontrada nos hipervisores ativos.
                     </td>
                   </tr>
@@ -457,11 +516,12 @@ export default function MonitoringPage() {
                             {vm.status}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-center whitespace-nowrap min-w-[150px]">
+                        {/* CPU usage progress bar */}
+                        <td className="px-6 py-4 text-center whitespace-nowrap min-w-[120px]">
                           {isRunning ? (
                             <div className="flex flex-col items-center gap-1">
                               <span className="text-xs font-semibold text-text-primary">{vm.cpuUsage || 0}%</span>
-                              <div className="w-24 bg-bg-primary h-2 rounded-full overflow-hidden border border-border-color">
+                              <div className="w-20 bg-bg-primary h-2 rounded-full overflow-hidden border border-border-color">
                                 <div 
                                   className={`h-full rounded-full transition-all duration-500 ${
                                     (vm.cpuUsage || 0) > 75 ? "bg-red-500" : (vm.cpuUsage || 0) > 50 ? "bg-amber-500" : "bg-emerald-500"
@@ -474,18 +534,52 @@ export default function MonitoringPage() {
                             <span className="text-text-muted text-xs italic">-</span>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-center whitespace-nowrap min-w-[150px]">
+                        {/* RAM usage progress bar */}
+                        <td className="px-6 py-4 text-center whitespace-nowrap min-w-[130px]">
                           {isRunning ? (
                             <div className="flex flex-col items-center gap-1">
                               <span className="text-xs font-semibold text-text-primary">
                                 {vm.memoryUsed || 0} MB <span className="text-text-muted font-normal">/ {vm.memory} MB</span>
                               </span>
-                              <div className="w-24 bg-bg-primary h-2 rounded-full overflow-hidden border border-border-color">
+                              <div className="w-20 bg-bg-primary h-2 rounded-full overflow-hidden border border-border-color">
                                 <div 
                                   className="bg-blue-500 h-full rounded-full transition-all duration-500" 
                                   style={{ width: `${Math.round(((vm.memoryUsed || 0) / vm.memory) * 100)}%` }}
                                 ></div>
                               </div>
+                            </div>
+                          ) : (
+                            <span className="text-text-muted text-xs italic">-</span>
+                          )}
+                        </td>
+                        {/* Storage usage progress bar */}
+                        <td className="px-6 py-4 text-center whitespace-nowrap min-w-[130px]">
+                          {vm.disk ? (
+                            <div className="flex flex-col items-center gap-1">
+                              <span className="text-xs font-semibold text-text-primary">
+                                {vm.diskUsed || 0} GB <span className="text-text-muted font-normal">/ {vm.disk} GB</span>
+                              </span>
+                              <div className="w-20 bg-bg-primary h-2 rounded-full overflow-hidden border border-border-color">
+                                <div 
+                                  className="bg-indigo-550 h-full rounded-full transition-all duration-500" 
+                                  style={{ width: `${Math.round(((vm.diskUsed || 0) / vm.disk) * 100)}%` }}
+                                ></div>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-text-muted text-xs italic">-</span>
+                          )}
+                        </td>
+                        {/* Network Speed */}
+                        <td className="px-6 py-4 text-center whitespace-nowrap min-w-[160px]">
+                          {isRunning ? (
+                            <div className="flex flex-col items-center text-[10px] gap-0.5 font-bold font-mono">
+                              <span className="text-emerald-500 flex items-center gap-1">
+                                &uarr; {formatSpeed(vm.netIn)}
+                              </span>
+                              <span className="text-blue-500 flex items-center gap-1">
+                                &darr; {formatSpeed(vm.netOut)}
+                              </span>
                             </div>
                           ) : (
                             <span className="text-text-muted text-xs italic">-</span>
@@ -619,7 +713,7 @@ export default function MonitoringPage() {
           </div>
 
           {/* Dynamic Grid of Custom Widgets */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative">
             {activeWidgets.map((widget, index) => {
               let gridSpan = "col-span-1";
               if (widget.w === 2) gridSpan = "col-span-1 lg:col-span-2";
@@ -636,7 +730,7 @@ export default function MonitoringPage() {
                   onDragOver={(e) => handleDragOver(e, index)}
                   onDragEnd={handleDragEnd}
                   onDrop={(e) => handleDrop(e, index)}
-                  className={`bg-bg-secondary border rounded-2xl flex flex-col overflow-hidden transition-all duration-300 ${gridSpan} ${
+                  className={`relative bg-bg-secondary border rounded-2xl flex flex-col overflow-hidden transition-all duration-300 ${gridSpan} ${
                     isEditing 
                       ? "border-dashed border-blue-500/50 ring-2 ring-blue-500/5 bg-blue-500/[0.01] cursor-grab active:cursor-grabbing" 
                       : "border-border-color hover:border-border-color/80"
@@ -644,8 +738,21 @@ export default function MonitoringPage() {
                     isOver ? "border-emerald-500/60 ring-4 ring-emerald-500/10 scale-[1.01]" : ""
                   }`}
                 >
+                  {/* Drag and Resize Grip overlays */}
+                  {isEditing && (
+                    <div
+                      onMouseDown={(e) => handleResizeStart(e, index)}
+                      className="absolute bottom-1 right-1 w-5 h-5 cursor-se-resize flex items-end justify-end p-0.5 text-text-muted hover:text-blue-500 transition-colors z-20"
+                      title="Arraste para redimensionar"
+                    >
+                      <svg width="10" height="10" viewBox="0 0 10 10" className="fill-current rotate-90 opacity-40 hover:opacity-100">
+                        <path d="M10 0 L10 10 L0 10 Z" />
+                      </svg>
+                    </div>
+                  )}
+
                   {/* Widget Header */}
-                  <div className="p-4 border-b border-border-color flex items-center justify-between bg-bg-secondary/40">
+                  <div className="p-4 border-b border-border-color flex items-center justify-between bg-bg-secondary/40 select-none">
                     <div className="flex items-center gap-2">
                       {isEditing && (
                         <GripVertical className="w-4 h-4 text-text-muted shrink-0 cursor-grab" />
@@ -843,27 +950,75 @@ export default function MonitoringPage() {
 
                       const isRunning = selectedVm.status === "RUNNING";
                       return (
-                        <div className="space-y-3 py-1 text-xs">
-                          <div className="flex justify-between items-center">
-                            <span className="font-bold text-text-primary">{selectedVm.name}</span>
+                        <div className="space-y-4 py-1 text-xs">
+                          {/* Top Info */}
+                          <div className="flex justify-between items-center pb-2 border-b border-border-color/40">
+                            <div>
+                              <span className="font-bold text-text-primary text-sm block">{selectedVm.name}</span>
+                              <span className="text-[10px] text-text-secondary font-mono">Nó: {selectedVm.node || selectedVm.hypervisorName} &bull; ID: {selectedVm.id}</span>
+                            </div>
                             <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${
-                              isRunning ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" : "bg-bg-tertiary text-text-secondary"
-                            }`}>{selectedVm.status}</span>
+                              isRunning 
+                                ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" 
+                                : "bg-bg-tertiary text-text-secondary border-border-color"
+                            }`}>{isRunning ? "ATIVO" : "INATIVO"}</span>
                           </div>
 
                           {isRunning ? (
-                            <div className="grid grid-cols-2 gap-3 pt-1">
-                              <div className="p-2.5 bg-bg-primary rounded-xl border border-border-color">
-                                <span className="text-[10px] text-text-secondary font-medium block">CPU</span>
-                                <span className="text-sm font-bold text-text-primary">{selectedVm.cpuUsage || 0}%</span>
+                            <div className="grid grid-cols-2 gap-3">
+                              {/* CPU info */}
+                              <div className="p-3 bg-bg-primary rounded-xl border border-border-color space-y-1">
+                                <span className="text-[10px] text-text-muted font-bold tracking-wide uppercase">CPU</span>
+                                <div className="flex items-baseline justify-between">
+                                  <span className="text-sm font-extrabold text-text-primary">{selectedVm.cpuUsage || 0}%</span>
+                                  <span className="text-[9px] text-text-secondary font-mono">{selectedVm.cpu} vCPUs</span>
+                                </div>
+                                <div className="text-[9px] text-text-muted">Min Shares: {selectedVm.cpuShares || 1024}</div>
                               </div>
-                              <div className="p-2.5 bg-bg-primary rounded-xl border border-border-color">
-                                <span className="text-[10px] text-text-secondary font-medium block">RAM</span>
-                                <span className="text-sm font-bold text-text-primary">{selectedVm.memoryUsed || 0} MB</span>
+
+                              {/* RAM info */}
+                              <div className="p-3 bg-bg-primary rounded-xl border border-border-color space-y-1">
+                                <span className="text-[10px] text-text-muted font-bold tracking-wide uppercase">RAM (Memória)</span>
+                                <div className="flex items-baseline justify-between">
+                                  <span className="text-sm font-extrabold text-text-primary">{selectedVm.memoryUsed || 0} MB</span>
+                                  <span className="text-[9px] text-text-secondary font-mono">/ {selectedVm.memory} MB</span>
+                                </div>
+                                <div className="w-full bg-bg-secondary h-1 rounded-full overflow-hidden">
+                                  <div className="bg-blue-500 h-full" style={{ width: `${Math.round(((selectedVm.memoryUsed || 0) / selectedVm.memory) * 100)}%` }}></div>
+                                </div>
+                              </div>
+
+                              {/* Network traffic info */}
+                              <div className="p-3 bg-bg-primary rounded-xl border border-border-color space-y-1 col-span-2">
+                                <span className="text-[10px] text-text-muted font-bold tracking-wide uppercase block">Tráfego de Rede (E/S)</span>
+                                <div className="flex justify-between items-center text-xs">
+                                  <span className="flex items-center gap-1 text-emerald-500 font-semibold font-mono text-[10px]">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-550 animate-pulse"></span>
+                                    Entrada (In): {formatSpeed(selectedVm.netIn)}
+                                  </span>
+                                  <span className="flex items-center gap-1 text-blue-500 font-semibold font-mono text-[10px]">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-550 animate-pulse"></span>
+                                    Saída (Out): {formatSpeed(selectedVm.netOut)}
+                                  </span>
+                                </div>
+                              </div>
+
+                              {/* Storage info */}
+                              <div className="p-3 bg-bg-primary rounded-xl border border-border-color space-y-1 col-span-2">
+                                <div className="flex justify-between items-center">
+                                  <span className="text-[10px] text-text-muted font-bold tracking-wide uppercase">Armazenamento</span>
+                                  <span className="text-[10px] text-text-secondary font-bold">{selectedVm.diskUsed || 0} GB / {selectedVm.disk} GB</span>
+                                </div>
+                                <div className="w-full bg-bg-secondary h-1.5 rounded-full overflow-hidden border border-border-color">
+                                  <div className="bg-indigo-500 h-full" style={{ width: `${Math.round(((selectedVm.diskUsed || 0) / selectedVm.disk) * 100)}%` }}></div>
+                                </div>
                               </div>
                             </div>
                           ) : (
-                            <p className="text-xs text-text-muted italic text-center py-4">Máquina virtual está desligada.</p>
+                            <div className="flex flex-col items-center justify-center py-6 bg-bg-primary rounded-xl border border-border-color border-dashed">
+                              <AlertCircle className="w-5 h-5 text-text-muted mb-1" />
+                              <p className="text-text-muted text-[11px] italic">Máquina virtual offline. Telemetria indisponível.</p>
+                            </div>
                           )}
                         </div>
                       );

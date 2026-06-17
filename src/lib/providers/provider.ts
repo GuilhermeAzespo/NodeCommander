@@ -10,6 +10,10 @@ export interface VM {
   cpuUsage?: number;   // % (0-100)
   memoryUsed?: number; // MB
   uptime?: number;     // segundos
+  netIn?: number;      // bytes/s
+  netOut?: number;     // bytes/s
+  diskUsed?: number;   // GB
+  cpuShares?: number;  // cpu shares / prioridade
 }
 
 export interface HostMetrics {

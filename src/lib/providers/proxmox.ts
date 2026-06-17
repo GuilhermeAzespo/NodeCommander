@@ -244,16 +244,27 @@ export class ProxmoxProvider implements HypervisorProvider {
         let cpuUsage = 0;
         let memoryUsed = 0;
         let uptime = 0;
+        let netIn = 0;
+        let netOut = 0;
+        let diskUsed = 0;
+        let cpuShares = 1024;
 
         if (isRunning) {
           const hash = parseInt(vm.id) || 100;
           cpuUsage = Math.round(((Math.sin(Date.now() / 5000 + hash) + 1) / 2) * 35 + 5); // 5% to 40%
           memoryUsed = Math.round(vm.memory * (0.3 + ((Math.cos(Date.now() / 8000 + hash) + 1) / 2) * 0.4)); // 30% to 70%
           uptime = Math.round((Date.now() - (hash * 100000)) / 1000) % 604800 + 3600;
+          netIn = Math.round((Math.sin(Date.now() / 3000 + hash) + 1.2) * 1200000); // bytes/s
+          netOut = Math.round((Math.cos(Date.now() / 4000 + hash) + 1.1) * 600000); // bytes/s
+          diskUsed = Math.round(vm.disk * 0.42); // 42% of total disk
+          cpuShares = 1000 + (hash % 10) * 10;
         } else if (isPaused) {
           cpuUsage = 0;
           memoryUsed = Math.round(vm.memory * 0.12);
           uptime = 0;
+          diskUsed = Math.round(vm.disk * 0.42);
+        } else {
+          diskUsed = Math.round(vm.disk * 0.42);
         }
 
         return {
@@ -261,6 +272,10 @@ export class ProxmoxProvider implements HypervisorProvider {
           cpuUsage,
           memoryUsed,
           uptime,
+          netIn,
+          netOut,
+          diskUsed,
+          cpuShares,
         };
       });
     }
@@ -293,6 +308,10 @@ export class ProxmoxProvider implements HypervisorProvider {
             cpuUsage: item.status === "running" && typeof item.cpu === "number" ? Math.round(item.cpu * 100) : 0,
             memoryUsed: item.status === "running" && typeof item.mem === "number" ? Math.round(item.mem / (1024 * 1024)) : 0,
             uptime: item.status === "running" && typeof item.uptime === "number" ? item.uptime : 0,
+            netIn: item.status === "running" && typeof item.netin === "number" ? item.netin : 0,
+            netOut: item.status === "running" && typeof item.netout === "number" ? item.netout : 0,
+            diskUsed: typeof item.disk === "number" ? Math.round(item.disk / (1024 * 1024 * 1024)) : 0,
+            cpuShares: typeof item.shares === "number" ? item.shares : 1024,
           };
         });
       }
@@ -318,6 +337,10 @@ export class ProxmoxProvider implements HypervisorProvider {
           cpuUsage: item.status === "running" && typeof item.cpu === "number" ? Math.round(item.cpu * 100) : 0,
           memoryUsed: item.status === "running" && typeof item.mem === "number" ? Math.round(item.mem / (1024 * 1024)) : 0,
           uptime: item.status === "running" && typeof item.uptime === "number" ? item.uptime : 0,
+          netIn: item.status === "running" && typeof item.netin === "number" ? item.netin : 0,
+          netOut: item.status === "running" && typeof item.netout === "number" ? item.netout : 0,
+          diskUsed: typeof item.disk === "number" ? Math.round(item.disk / (1024 * 1024 * 1024)) : 0,
+          cpuShares: typeof item.shares === "number" ? item.shares : 1024,
         };
       });
 
