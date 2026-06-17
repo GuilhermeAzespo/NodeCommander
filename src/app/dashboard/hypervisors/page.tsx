@@ -44,6 +44,7 @@ export default function HypervisorsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [deleteConfirmHvId, setDeleteConfirmHvId] = useState<string | null>(null);
   
   // Console Modal State
   const [consoleModalOpen, setConsoleModalOpen] = useState(false);
@@ -223,10 +224,7 @@ export default function HypervisorsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Deseja realmente remover este hipervisor? Todas as permissões vinculadas serão apagadas.")) {
-      return;
-    }
-
+    setSubmitLoading(true);
     try {
       const res = await fetch(`/api/admin/hypervisors/${id}`, {
         method: "DELETE"
@@ -234,6 +232,7 @@ export default function HypervisorsPage() {
 
       if (res.ok) {
         setSuccessMsg("Hipervisor deletado.");
+        setDeleteConfirmHvId(null);
         fetchHypervisors();
         setTimeout(() => setSuccessMsg(""), 4000);
       } else {
@@ -242,6 +241,8 @@ export default function HypervisorsPage() {
       }
     } catch (err) {
       setError("Erro ao deletar.");
+    } finally {
+      setSubmitLoading(false);
     }
   };
 
@@ -386,7 +387,7 @@ export default function HypervisorsPage() {
                 </button>
 
                 <button
-                  onClick={() => handleDelete(h.id)}
+                  onClick={() => setDeleteConfirmHvId(h.id)}
                   title="Deletar Hipervisor"
                   className="p-2 bg-bg-primary hover:bg-red-500/10 border border-border-color hover:border-red-500/30 text-text-secondary hover:text-red-500 rounded-lg transition-colors cursor-pointer"
                 >
@@ -395,6 +396,50 @@ export default function HypervisorsPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmHvId && (
+        <div className="fixed inset-0 bg-bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-bg-secondary border border-border-color rounded-2xl w-full max-w-md shadow-2xl relative p-6 animate-scale-up space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 bg-red-500/10 text-red-500 rounded-xl">
+                <AlertCircle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-text-primary">Confirmar Exclusão</h3>
+                <p className="text-xs text-text-secondary mt-1">
+                  Deseja realmente remover este hipervisor? Todas as permissões vinculadas serão apagadas. Esta ação é irreversível.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmHvId(null)}
+                className="px-4 py-2 border border-border-color hover:bg-bg-tertiary text-text-secondary hover:text-text-primary rounded-xl text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={submitLoading}
+                onClick={() => handleDelete(deleteConfirmHvId)}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-semibold transition-colors cursor-pointer flex items-center gap-1.5"
+              >
+                {submitLoading ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Deletando...</span>
+                  </>
+                ) : (
+                  <span>Deletar Hipervisor</span>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

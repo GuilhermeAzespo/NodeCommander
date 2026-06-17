@@ -229,9 +229,9 @@ export class ProxmoxProvider implements HypervisorProvider {
         diskUsage: Math.round((disk.used / disk.total) * 10000) / 100,
         uptime,
       };
-    } catch (err) {
+    } catch (err: any) {
       console.error(`Proxmox getHostMetrics failed for node ${node}:`, err);
-      return { cpuUsage: 0, memoryUsage: 0, diskUsage: 0, uptime: 0 };
+      throw new Error(`Falha ao obter métricas do Proxmox no nó ${node}: ${err.message || err}`);
     }
   }
 
