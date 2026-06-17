@@ -220,7 +220,7 @@ export class ProxmoxProvider implements HypervisorProvider {
       const data = await this.request("GET", `/nodes/${node}/status`);
       const cpu = data.cpu || 0;
       const memory = data.memory || { used: 0, total: 1 };
-      const disk = data.disk || { used: 0, total: 1 };
+      const disk = data.rootfs || data.disk || { used: 0, total: 1 };
       const uptime = data.uptime || 0;
 
       return {
