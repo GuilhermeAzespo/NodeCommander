@@ -566,12 +566,12 @@ export default function VMsPage() {
                 <table className="w-full text-left text-sm">
                   <thead className="text-[10px] uppercase font-bold text-text-secondary tracking-wider bg-bg-primary/45 border-b border-border-color">
                     <tr>
-                      <th className="px-6 py-4">ID</th>
-                      <th className="px-6 py-4">Nome da Máquina</th>
-                      <th className="px-6 py-4">Status</th>
-                      <th className="px-6 py-4">Configuração (CPU/RAM/Disco)</th>
-                      <th className="px-6 py-4">Endereço IP</th>
-                      <th className="px-6 py-4 text-right">Controles</th>
+                      <th className="px-6 py-4 text-center">ID</th>
+                      <th className="px-6 py-4 text-center">Nome da Máquina</th>
+                      <th className="px-6 py-4 text-center">Status</th>
+                      <th className="px-6 py-4 text-center">Configuração (CPU/RAM/Disco)</th>
+                      <th className="px-6 py-4 text-center">Endereço IP</th>
+                      <th className="px-6 py-4 text-center">Controles</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border-color">
@@ -582,9 +582,9 @@ export default function VMsPage() {
                           actionLoadingId === vm.id ? "opacity-50 pointer-events-none" : ""
                         }`}
                       >
-                        <td className="px-6 py-4 text-xs font-mono text-text-secondary">{vm.id}</td>
-                        <td className="px-6 py-4 text-text-primary font-bold whitespace-nowrap">{vm.name || `VM ${vm.id}`}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
+                        <td className="px-6 py-4 text-xs font-mono text-text-secondary text-center">{vm.id}</td>
+                        <td className="px-6 py-4 text-text-primary font-bold whitespace-nowrap text-center">{vm.name || `VM ${vm.id}`}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-center">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${
                             vm.status === "RUNNING"
                               ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
@@ -597,12 +597,12 @@ export default function VMsPage() {
                             {vm.status}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-text-secondary font-medium whitespace-nowrap">
+                        <td className="px-6 py-4 text-text-secondary font-medium whitespace-nowrap text-center">
                           {vm.cpu} vCPUs &bull; {vm.memory >= 1024 ? `${vm.memory / 1024} GB` : `${vm.memory} MB`} &bull; {vm.disk} GB
                         </td>
-                        <td className="px-6 py-4 text-text-secondary font-mono text-xs whitespace-nowrap">
+                        <td className="px-6 py-4 text-text-secondary font-mono text-xs whitespace-nowrap text-center">
                           {vm.ipAddress ? (
-                            <span className="text-blue-500 hover:underline flex items-center gap-1 cursor-pointer">
+                            <span className="text-blue-500 hover:underline inline-flex items-center gap-1 cursor-pointer justify-center w-full">
                               {vm.ipAddress}
                               <ExternalLink className="w-3 h-3 text-text-muted" />
                             </span>
@@ -610,14 +610,14 @@ export default function VMsPage() {
                             <span className="text-text-muted italic">n/a</span>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-right whitespace-nowrap">
+                        <td className="px-6 py-4 text-center whitespace-nowrap">
                           {actionLoadingId === vm.id ? (
-                            <div className="inline-flex items-center gap-1.5 text-xs text-blue-550 font-semibold px-4">
+                            <div className="inline-flex items-center justify-center gap-1.5 text-xs text-blue-550 font-semibold w-full">
                               <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
                               <span>Aguardando nó...</span>
                             </div>
                           ) : (
-                            <div className="flex justify-end gap-1.5">
+                            <div className="flex justify-center gap-1.5">
                               {vm.status !== "RUNNING" ? (
                                 <button
                                   onClick={() => handleVMAction(vm.id, "START")}
