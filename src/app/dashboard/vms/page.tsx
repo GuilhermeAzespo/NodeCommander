@@ -1277,17 +1277,107 @@ export default function VMsPage() {
                         {availableNodes.length > 0 && (
                           <div>
                             <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Nó de Destino (Cluster)</label>
-                            <select
-                              value={selectedNodeForWizard}
-                              onChange={(e) => setSelectedNodeForWizard(e.target.value)}
-                              className="w-full px-3 py-2 bg-input-bg border border-input-border rounded-xl text-text-primary text-sm focus:outline-none focus:border-blue-500 cursor-pointer"
-                            >
-                              {availableNodes.map((node) => (
-                                <option key={node.name} value={node.name}>
-                                  {node.name} ({node.status})
-                                </option>
-                              ))}
-                            </select>
+                            {loadingHvDetails ? (
+                              <div className="flex items-center gap-2 py-4">
+                                <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                                <span className="text-text-secondary text-xs">Carregando nós do cluster...</span>
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                {availableNodes.map((node) => {
+                                  const isSelected = selectedNodeForWizard === node.name;
+                                  const isOnline = node.status === "ONLINE" || node.status === "online";
+                                  const nodeStorages = (node.storages || []) as any[];
+                                  const formatBytes = (bytes: number) => {
+                                    if (!bytes) return "—";
+                                    const gb = bytes / (1024 ** 3);
+                                    return gb >= 1024 ? `${(gb / 1024).toFixed(1)} TB` : `${gb.toFixed(0)} GB`;
+                                  };
+                                  return (
+                                    <div
+                                      key={node.name}
+                                      onClick={() => isOnline && setSelectedNodeForWizard(node.name)}
+                                      className={`border rounded-xl p-3 transition-all ${
+                                        isSelected
+                                          ? "border-blue-500 bg-blue-500/5 shadow-sm shadow-blue-500/10"
+                                          : isOnline
+                                          ? "border-border-color bg-bg-primary/40 hover:border-blue-500/50 hover:bg-bg-primary/70 cursor-pointer"
+                                          : "border-border-color bg-bg-primary/20 opacity-50 cursor-not-allowed"
+                                      }`}
+                                    >
+                                      {/* Node header */}
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="flex items-center gap-2">
+                                          {isSelected && (
+                                            <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                                          )}
+                                          <span className="font-bold text-sm text-text-primary">{node.name}</span>
+                                        </div>
+                                        <span className={`text-[9px] font-black px-2 py-0.5 rounded border ${
+                                          isOnline
+                                            ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+                                            : "bg-red-500/10 text-red-500 border-red-500/20"
+                                        }`}>
+                                          {isOnline ? "ONLINE" : "OFFLINE"}
+                                        </span>
+                                      </div>
+
+                                      {/* Storage table */}
+                                      {isOnline && nodeStorages.length > 0 && (
+                                        <div className="mt-2">
+                                          <div className="text-[9px] font-black text-text-secondary uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                                            <Database className="w-3 h-3" />
+                                            Volumes / Storages
+                                          </div>
+                                          <div className="w-full overflow-hidden rounded-lg border border-border-color/50">
+                                            <table className="w-full text-[10px]">
+                                              <thead>
+                                                <tr className="bg-bg-primary/60 border-b border-border-color/50">
+                                                  <th className="text-left px-2 py-1 text-text-muted font-semibold">Nome</th>
+                                                  <th className="text-left px-2 py-1 text-text-muted font-semibold">Tipo</th>
+                                                  <th className="text-right px-2 py-1 text-text-muted font-semibold">Disponível</th>
+                                                  <th className="text-right px-2 py-1 text-text-muted font-semibold">Total</th>
+                                                  <th className="text-right px-2 py-1 text-text-muted font-semibold">Uso</th>
+                                                </tr>
+                                              </thead>
+                                              <tbody>
+                                                {nodeStorages.map((s: any) => (
+                                                  <tr key={s.name} className="border-b border-border-color/30 last:border-0 hover:bg-bg-primary/40 transition-colors">
+                                                    <td className="px-2 py-1.5 font-bold text-text-primary">{s.name}</td>
+                                                    <td className="px-2 py-1.5 text-text-secondary">
+                                                      <span className="px-1.5 py-0.5 bg-bg-primary/60 border border-border-color/40 rounded text-[8px]">{s.type}</span>
+                                                    </td>
+                                                    <td className="px-2 py-1.5 text-right text-emerald-400 font-semibold">{formatBytes(s.avail)}</td>
+                                                    <td className="px-2 py-1.5 text-right text-text-secondary">{formatBytes(s.total)}</td>
+                                                    <td className="px-2 py-1.5 text-right">
+                                                      <div className="flex items-center justify-end gap-1.5">
+                                                        <div className="w-12 bg-input-bg h-1 rounded-full overflow-hidden">
+                                                          <div
+                                                            className={`h-full transition-all ${getUsageColorClass(s.percent)}`}
+                                                            style={{ width: `${s.percent}%` }}
+                                                          />
+                                                        </div>
+                                                        <span className={`font-bold ${
+                                                          s.percent >= 90 ? "text-rose-400" : s.percent >= 70 ? "text-amber-400" : "text-text-secondary"
+                                                        }`}>{s.percent}%</span>
+                                                      </div>
+                                                    </td>
+                                                  </tr>
+                                                ))}
+                                              </tbody>
+                                            </table>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {isOnline && nodeStorages.length === 0 && (
+                                        <p className="text-[10px] text-text-muted italic mt-1">Nenhum storage detectado neste nó.</p>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         )}
                         <div>
@@ -1383,24 +1473,29 @@ export default function VMsPage() {
                                         }}
                                         className="w-full px-3 py-1.5 bg-input-bg border border-input-border rounded-lg text-text-primary text-xs focus:outline-none focus:border-blue-500 cursor-pointer"
                                       >
-                                        {availableStorages.map((s) => {
+                                        {(() => {
+                                          const selectedNodeData = availableNodes.find((n: any) => n.name === selectedNodeForWizard);
+                                          const nodeStorages: any[] = selectedNodeData?.storages?.length > 0
+                                            ? selectedNodeData.storages
+                                            : availableStorages;
                                           const formatBytes = (bytes?: number) => {
-                                            if (bytes === undefined || bytes === null) return "";
-                                            const gb = bytes / (1024 * 1024 * 1024);
-                                            if (gb >= 1024) {
-                                              return `${(gb / 1024).toFixed(1)} TB`;
-                                            }
-                                            return `${gb.toFixed(0)} GB`;
+                                            if (!bytes) return "";
+                                            const gb = bytes / (1024 ** 3);
+                                            return gb >= 1024 ? `${(gb / 1024).toFixed(1)} TB` : `${gb.toFixed(0)} GB`;
                                           };
-                                          const capacityText = s.avail !== undefined && s.size !== undefined
-                                            ? ` - ${formatBytes(s.avail)} livres de ${formatBytes(s.size)}`
-                                            : "";
-                                          return (
-                                            <option key={s.name} value={s.name}>
-                                              {s.name} ({s.type}){capacityText}
-                                            </option>
-                                          );
-                                        })}
+                                          return nodeStorages.map((s: any) => {
+                                            const avail = s.avail;
+                                            const total = s.total ?? s.size;
+                                            const capacityText = avail && total
+                                              ? ` — ${formatBytes(avail)} livres de ${formatBytes(total)}`
+                                              : "";
+                                            return (
+                                              <option key={s.name} value={s.name}>
+                                                {s.name} ({s.type}){capacityText}
+                                              </option>
+                                            );
+                                          });
+                                        })()}
                                       </select>
                                     </div>
                                     <div>
