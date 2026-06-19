@@ -1,0 +1,383 @@
+"use client";
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import {
+  TerminalSquare, Plus, Trash2, Edit2, Server, Loader2,
+  CheckCircle2, AlertCircle, X, Wifi, WifiOff, Save, Eye, EyeOff, RefreshCw
+} from "lucide-react";
+
+interface SshSession {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  username: string;
+  createdAt: string;
+}
+
+interface TerminalLine {
+  text: string;
+  type: "output" | "error" | "system";
+}
+
+export default function SshConsolePage() {
+  const [sessions, setSessions] = useState<SshSession[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeSession, setActiveSession] = useState<SshSession | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<"idle" | "connecting" | "connected" | "disconnected" | "error">("idle");
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  // Form state
+  const [showForm, setShowForm] = useState(false);
+  const [editingSession, setEditingSession] = useState<SshSession | null>(null);
+  const [formName, setFormName] = useState("");
+  const [formHost, setFormHost] = useState("");
+  const [formPort, setFormPort] = useState("22");
+  const [formUser, setFormUser] = useState("");
+  const [formPass, setFormPass] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [formLoading, setFormLoading] = useState(false);
+
+  // Terminal state
+  const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
+  const [inputLine, setInputLine] = useState("");
+  const [wsRef] = useState<{ current: WebSocket | null }>({ current: null });
+  const terminalRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { fetchSessions(); }, []);
+
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  }, [terminalLines]);
+
+  const fetchSessions = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/ssh/sessions");
+      const data = await res.json();
+      if (res.ok) setSessions(data.sessions || []);
+    } catch { setError("Falha ao carregar sessões."); }
+    finally { setLoading(false); }
+  };
+
+  const resetForm = () => {
+    setFormName(""); setFormHost(""); setFormPort("22");
+    setFormUser(""); setFormPass(""); setShowPass(false);
+    setEditingSession(null); setShowForm(false);
+  };
+
+  const openNewForm = () => { resetForm(); setShowForm(true); };
+
+  const openEditForm = (s: SshSession) => {
+    setEditingSession(s);
+    setFormName(s.name); setFormHost(s.host);
+    setFormPort(String(s.port)); setFormUser(s.username);
+    setFormPass(""); setShowForm(true);
+  };
+
+  const handleSaveSession = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formName || !formHost || !formUser || (!editingSession && !formPass)) {
+      setError("Preencha todos os campos obrigatórios."); return;
+    }
+    setFormLoading(true); setError("");
+    try {
+      const method = editingSession ? "PATCH" : "POST";
+      const body: any = { name: formName, host: formHost, port: formPort, username: formUser };
+      if (editingSession) body.id = editingSession.id;
+      if (formPass) body.password = formPass;
+
+      const res = await fetch("/api/ssh/sessions", { method, headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setSuccess(editingSession ? "Sessão atualizada!" : "Sessão criada!");
+      resetForm(); fetchSessions();
+      setTimeout(() => setSuccess(""), 3000);
+    } catch (err: any) { setError(err.message); }
+    finally { setFormLoading(false); }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Deletar esta sessão SSH?")) return;
+    try {
+      await fetch(`/api/ssh/sessions?id=${id}`, { method: "DELETE" });
+      if (activeSession?.id === id) disconnect();
+      fetchSessions();
+    } catch { setError("Falha ao deletar sessão."); }
+  };
+
+  const addLine = useCallback((text: string, type: TerminalLine["type"] = "output") => {
+    setTerminalLines(prev => [...prev, { text, type }]);
+  }, []);
+
+  const disconnect = useCallback(() => {
+    if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+    setConnectionStatus("disconnected");
+  }, [wsRef]);
+
+  const connect = async (session: SshSession) => {
+    if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
+    setActiveSession(session);
+    setTerminalLines([]);
+    setConnectionStatus("connecting");
+    setError("");
+    addLine(`Conectando a ${session.username}@${session.host}:${session.port}...`, "system");
+
+    try {
+      const tokenRes = await fetch("/api/ssh/token", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: session.id }),
+      });
+      const tokenData = await tokenRes.json();
+      if (!tokenRes.ok) throw new Error(tokenData.error);
+
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const wsUrl = `${protocol}//${window.location.host}/api/sshproxy?sessionId=${session.id}&authToken=${tokenData.authToken}`;
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => addLine("WebSocket estabelecido. Aguardando SSH...", "system");
+
+      ws.onmessage = (evt) => {
+        try {
+          const msg = JSON.parse(evt.data);
+          if (msg.type === "data") {
+            const decoded = atob(msg.data);
+            addLine(decoded, "output");
+          } else if (msg.type === "status") {
+            if (msg.message === "connected") { setConnectionStatus("connected"); addLine("✓ Conectado com sucesso!\r\n", "system"); }
+            else if (msg.message === "disconnected") { setConnectionStatus("disconnected"); addLine("\r\nConexão encerrada.", "system"); }
+          } else if (msg.type === "error") {
+            setConnectionStatus("error"); addLine(`✗ Erro: ${msg.message}`, "error");
+          }
+        } catch { addLine(evt.data, "output"); }
+      };
+
+      ws.onclose = () => { setConnectionStatus("disconnected"); wsRef.current = null; };
+      ws.onerror = () => { setConnectionStatus("error"); addLine("✗ Erro de WebSocket.", "error"); };
+    } catch (err: any) {
+      setConnectionStatus("error"); addLine(`✗ ${err.message}`, "error"); setError(err.message);
+    }
+  };
+
+  const sendInput = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    wsRef.current.send(JSON.stringify({ type: "data", data: btoa(inputLine + "\n") }));
+    setInputLine("");
+  };
+
+  const statusColor = { idle: "text-text-muted", connecting: "text-amber-400", connected: "text-emerald-400", disconnected: "text-text-muted", error: "text-rose-400" }[connectionStatus];
+  const statusLabel = { idle: "Sem conexão", connecting: "Conectando...", connected: "Conectado", disconnected: "Desconectado", error: "Erro" }[connectionStatus];
+
+  return (
+    <div className="space-y-6 h-full flex flex-col">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-extrabold text-text-primary tracking-tight flex items-center gap-3">
+            <TerminalSquare className="w-8 h-8 text-emerald-500" />
+            Console Remoto
+          </h1>
+          <p className="text-text-secondary mt-1">Gerencie e acesse servidores via SSH de forma centralizada.</p>
+        </div>
+        <button onClick={openNewForm} className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-3 rounded-xl font-medium transition-colors cursor-pointer shadow-lg shadow-emerald-900/20 shrink-0">
+          <Plus className="w-5 h-5" />
+          <span>Nova Sessão</span>
+        </button>
+      </div>
+
+      {error && (
+        <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-400 text-sm rounded-xl flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
+          <span>{error}</span>
+          <button onClick={() => setError("")} className="ml-auto"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+      {success && (
+        <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm rounded-xl flex items-start gap-3">
+          <CheckCircle2 className="w-5 h-5 shrink-0 mt-0.5" />
+          <span>{success}</span>
+        </div>
+      )}
+
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6 min-h-0">
+        {/* Sessions list */}
+        <div className="flex flex-col gap-3">
+          <h2 className="text-xs font-black text-text-muted uppercase tracking-wider px-1">Sessões Salvas</h2>
+          {loading ? (
+            <div className="flex items-center justify-center py-10"><Loader2 className="w-6 h-6 text-emerald-500 animate-spin" /></div>
+          ) : sessions.length === 0 ? (
+            <div className="p-6 text-center bg-bg-secondary border border-border-color rounded-2xl">
+              <TerminalSquare className="w-10 h-10 text-text-muted mx-auto mb-3" />
+              <p className="text-text-secondary text-sm font-medium">Nenhuma sessão salva</p>
+              <p className="text-text-muted text-xs mt-1">Clique em "Nova Sessão" para começar.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {sessions.map((s) => (
+                <div key={s.id} className={`p-4 rounded-xl border transition-all ${activeSession?.id === s.id ? "border-emerald-500 bg-emerald-500/5 shadow-sm shadow-emerald-500/10" : "border-border-color bg-bg-secondary hover:border-border-color/60"}`}>
+                  <div className="flex items-start justify-between gap-2 mb-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-bold text-text-primary text-sm truncate">{s.name}</p>
+                      <p className="text-text-secondary text-[11px] truncate">{s.username}@{s.host}:{s.port}</p>
+                    </div>
+                    <div className="flex items-center gap-1 shrink-0">
+                      <button onClick={() => openEditForm(s)} className="p-1.5 rounded-lg hover:bg-bg-primary text-text-muted hover:text-text-primary transition-colors cursor-pointer" title="Editar"><Edit2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => handleDelete(s.id)} className="p-1.5 rounded-lg hover:bg-red-500/10 text-text-muted hover:text-red-400 transition-colors cursor-pointer" title="Deletar"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (activeSession?.id === s.id && connectionStatus === "connected") {
+                        disconnect();
+                      } else {
+                        connect(s);
+                      }
+                    }}
+                    disabled={connectionStatus === "connecting"}
+                    className={`w-full py-1.5 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${activeSession?.id === s.id && connectionStatus === "connected" ? "bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20" : "bg-emerald-600 hover:bg-emerald-500 text-white"}`}
+                  >
+                    {connectionStatus === "connecting" && activeSession?.id === s.id ? (
+                      <><Loader2 className="w-3 h-3 animate-spin" /><span>Conectando...</span></>
+                    ) : activeSession?.id === s.id && connectionStatus === "connected" ? (
+                      <><WifiOff className="w-3 h-3" /><span>Desconectar</span></>
+                    ) : (
+                      <><Wifi className="w-3 h-3" /><span>Conectar</span></>
+                    )}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Terminal */}
+        <div className="flex flex-col bg-bg-secondary border border-border-color rounded-2xl overflow-hidden min-h-[500px]">
+          {/* Terminal header */}
+          <div className="flex items-center justify-between px-4 py-3 bg-bg-primary/60 border-b border-border-color">
+            <div className="flex items-center gap-3">
+              <div className="flex gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-red-500/60" />
+                <div className="w-3 h-3 rounded-full bg-amber-500/60" />
+                <div className="w-3 h-3 rounded-full bg-emerald-500/60" />
+              </div>
+              <span className="text-text-secondary text-xs font-mono">
+                {activeSession ? `${activeSession.username}@${activeSession.host}` : "Nenhuma sessão ativa"}
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className={`text-[10px] font-bold flex items-center gap-1.5 ${statusColor}`}>
+                <span className={`w-1.5 h-1.5 rounded-full ${connectionStatus === "connected" ? "bg-emerald-400 animate-pulse" : connectionStatus === "connecting" ? "bg-amber-400 animate-pulse" : connectionStatus === "error" ? "bg-rose-400" : "bg-text-muted"}`} />
+                {statusLabel}
+              </span>
+              {connectionStatus === "connected" && (
+                <button onClick={() => activeSession && connect(activeSession)} className="p-1.5 rounded-lg hover:bg-bg-secondary text-text-muted hover:text-text-primary transition-colors cursor-pointer" title="Reconectar">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Terminal body */}
+          {connectionStatus === "idle" ? (
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8 bg-[#0d1117]">
+              <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
+                <TerminalSquare className="w-10 h-10 text-emerald-500" />
+              </div>
+              <div className="text-center">
+                <p className="text-emerald-400 font-bold">Console SSH Pronto</p>
+                <p className="text-text-muted text-sm mt-1">Selecione uma sessão à esquerda e clique em <strong className="text-text-secondary">Conectar</strong></p>
+              </div>
+              <p className="text-text-muted text-xs font-mono opacity-50 animate-pulse">{'>'} _</p>
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col bg-[#0d1117] min-h-0">
+              <div ref={terminalRef} className="flex-1 overflow-y-auto p-4 font-mono text-[13px] leading-relaxed space-y-0 min-h-0" style={{ maxHeight: "calc(100% - 48px)" }}>
+                {terminalLines.map((line, i) => (
+                  <pre key={i} className={`whitespace-pre-wrap break-all m-0 ${line.type === "error" ? "text-rose-400" : line.type === "system" ? "text-emerald-400/70 italic" : "text-emerald-50"}`}>
+                    {line.text}
+                  </pre>
+                ))}
+                {connectionStatus === "connected" && <span className="text-emerald-400 animate-pulse">█</span>}
+              </div>
+
+              {connectionStatus === "connected" && (
+                <form onSubmit={sendInput} className="flex items-center gap-2 px-4 py-2 border-t border-border-color/30 bg-black/20">
+                  <span className="text-emerald-400 font-mono text-sm shrink-0">$</span>
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={inputLine}
+                    onChange={(e) => setInputLine(e.target.value)}
+                    className="flex-1 bg-transparent text-emerald-50 font-mono text-sm outline-none placeholder-text-muted/40"
+                    placeholder="Digite um comando..."
+                    autoFocus
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                  <button type="submit" className="p-1.5 text-emerald-500/60 hover:text-emerald-400 transition-colors cursor-pointer">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Modal - New/Edit Session */}
+      {showForm && (
+        <div className="fixed inset-0 bg-bg-overlay backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-bg-secondary border border-border-color rounded-2xl w-full max-w-md shadow-2xl animate-scale-up">
+            <div className="p-6 border-b border-border-color flex items-center justify-between">
+              <h2 className="text-lg font-bold text-text-primary flex items-center gap-2">
+                <TerminalSquare className="w-5 h-5 text-emerald-500" />
+                {editingSession ? "Editar Sessão SSH" : "Nova Sessão SSH"}
+              </h2>
+              <button onClick={resetForm} className="p-2 hover:bg-bg-primary rounded-xl text-text-muted hover:text-text-primary transition-colors cursor-pointer"><X className="w-4 h-4" /></button>
+            </div>
+            <form onSubmit={handleSaveSession} className="p-6 space-y-4">
+              <div>
+                <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Nome da Sessão *</label>
+                <input type="text" required value={formName} onChange={(e) => setFormName(e.target.value)} placeholder='Ex: "Servidor Web Prod"' className="w-full px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-emerald-500 text-sm transition-colors" />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Host / IP *</label>
+                  <input type="text" required value={formHost} onChange={(e) => setFormHost(e.target.value)} placeholder="192.168.1.100" className="w-full px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-emerald-500 text-sm transition-colors" />
+                </div>
+                <div>
+                  <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Porta *</label>
+                  <input type="number" required value={formPort} onChange={(e) => setFormPort(e.target.value)} className="w-full px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary focus:outline-none focus:border-emerald-500 text-sm transition-colors" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Usuário *</label>
+                <input type="text" required value={formUser} onChange={(e) => setFormUser(e.target.value)} placeholder="root" className="w-full px-3.5 py-2.5 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-emerald-500 text-sm transition-colors" />
+              </div>
+              <div>
+                <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">Senha {editingSession ? "(deixe em branco para manter)" : "*"}</label>
+                <div className="relative">
+                  <input type={showPass ? "text" : "password"} required={!editingSession} value={formPass} onChange={(e) => setFormPass(e.target.value)} placeholder={editingSession ? "••••••••" : "Senha de acesso"} className="w-full px-3.5 py-2.5 pr-10 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-emerald-500 text-sm transition-colors" />
+                  <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary transition-colors cursor-pointer">
+                    {showPass ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button type="button" onClick={resetForm} className="px-4 py-2.5 border border-border-color text-text-secondary hover:text-text-primary hover:bg-bg-primary rounded-xl text-sm font-semibold transition-colors cursor-pointer">Cancelar</button>
+                <button type="submit" disabled={formLoading} className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white rounded-xl text-sm font-semibold transition-colors flex items-center gap-2 cursor-pointer">
+                  {formLoading ? <><Loader2 className="w-4 h-4 animate-spin" /><span>Salvando...</span></> : <><Save className="w-4 h-4" /><span>Salvar Sessão</span></>}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

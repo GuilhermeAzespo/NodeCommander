@@ -11,7 +11,8 @@ import {
   LogOut, 
   Terminal,
   RefreshCw,
-  Activity
+  Activity,
+  TerminalSquare
 } from "lucide-react";
 import ActiveLink from "./ActiveLink";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -75,6 +76,11 @@ export default async function DashboardLayout({
           <ActiveLink href="/dashboard/monitoring">
             <Activity className="w-5 h-5" />
             <span>Monitoramento</span>
+          </ActiveLink>
+
+          <ActiveLink href="/dashboard/ssh">
+            <TerminalSquare className="w-5 h-5" />
+            <span>Console Remoto</span>
           </ActiveLink>
 
           <ActiveLink href="/dashboard/hypervisors">

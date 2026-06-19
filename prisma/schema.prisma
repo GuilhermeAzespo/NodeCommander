@@ -86,3 +86,14 @@ model VmTemplate {
   updatedAt   DateTime @updatedAt
 }
 
+
+model SshSession {
+  id        String   @id @default(uuid())
+  name      String
+  host      String
+  port      Int      @default(22)
+  username  String
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
