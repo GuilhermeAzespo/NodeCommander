@@ -648,6 +648,14 @@ export class ProxmoxProvider implements HypervisorProvider {
     memoryTotal: number;
     memoryUsed: number;
     uptime: number;
+    storages?: {
+      name: string;
+      type: string;
+      total: number;
+      used: number;
+      avail: number;
+      percent: number;
+    }[];
   }[]> {
     if (this.isMock) {
       return [
@@ -659,6 +667,10 @@ export class ProxmoxProvider implements HypervisorProvider {
           memoryTotal: 32768,
           memoryUsed: 14745,
           uptime: 86400,
+          storages: [
+            { name: "local", type: "dir", total: 107374182400, used: 21474836480, avail: 85899345920, percent: 20 },
+            { name: "local-lvm", type: "lvmthin", total: 536870912000, used: 268435456000, avail: 268435456000, percent: 50 }
+          ]
         },
         {
           name: `${this.nodeName}-node-2`,
@@ -668,6 +680,10 @@ export class ProxmoxProvider implements HypervisorProvider {
           memoryTotal: 16384,
           memoryUsed: 9830,
           uptime: 124800,
+          storages: [
+            { name: "local", type: "dir", total: 107374182400, used: 53687091200, avail: 53687091200, percent: 50 },
+            { name: "local-zfs", type: "zfspool", total: 1073741824000, used: 858993459200, avail: 214748364800, percent: 80 }
+          ]
         }
       ];
     }
@@ -678,22 +694,49 @@ export class ProxmoxProvider implements HypervisorProvider {
         return [];
       }
 
-      return nodesData.map((node: any) => {
-        const cpuUsage = Math.round((node.cpu || 0) * 100);
-        const maxMem = node.maxmem || 1;
-        const usedMem = node.mem || 0;
-        const memoryUsage = Math.round((usedMem / maxMem) * 100);
+      const enrichedNodes = await Promise.all(
+        nodesData.map(async (node: any) => {
+          const cpuUsage = Math.round((node.cpu || 0) * 100);
+          const maxMem = node.maxmem || 1;
+          const usedMem = node.mem || 0;
+          const memoryUsage = Math.round((usedMem / maxMem) * 100);
+          const isOnline = node.status === "online";
+          
+          let storages: any[] = [];
+          if (isOnline) {
+            try {
+              const storageData = await this.request("GET", `/nodes/${node.node}/storage`);
+              if (Array.isArray(storageData)) {
+                storages = storageData
+                  .filter((s: any) => s.active === 1)
+                  .map((s: any) => ({
+                    name: s.storage,
+                    type: s.type,
+                    total: s.total || 0,
+                    used: s.used || 0,
+                    avail: s.avail || 0,
+                    percent: s.total ? Math.round((s.used / s.total) * 100) : 0
+                  }));
+              }
+            } catch (err) {
+              console.warn(`Failed to fetch storages for node ${node.node}:`, err);
+            }
+          }
 
-        return {
-          name: node.node,
-          status: node.status === "online" ? "ONLINE" : "OFFLINE",
-          cpuUsage,
-          memoryUsage,
-          memoryTotal: Math.round(maxMem / (1024 * 1024)),
-          memoryUsed: Math.round(usedMem / (1024 * 1024)),
-          uptime: node.uptime || 0,
-        };
-      });
+          return {
+            name: node.node,
+            status: (isOnline ? "ONLINE" : "OFFLINE") as "ONLINE" | "OFFLINE",
+            cpuUsage,
+            memoryUsage,
+            memoryTotal: Math.round(maxMem / (1024 * 1024)),
+            memoryUsed: Math.round(usedMem / (1024 * 1024)),
+            uptime: node.uptime || 0,
+            storages
+          };
+        })
+      );
+
+      return enrichedNodes;
     } catch (err) {
       console.error("Proxmox listNodes failed:", err);
       return [
@@ -705,6 +748,7 @@ export class ProxmoxProvider implements HypervisorProvider {
           memoryTotal: 0,
           memoryUsed: 0,
           uptime: 0,
+          storages: []
         }
       ];
     }

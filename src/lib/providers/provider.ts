@@ -53,6 +53,14 @@ export interface HypervisorProvider {
     memoryTotal: number;
     memoryUsed: number;
     uptime: number;
+    storages?: {
+      name: string;
+      type: string;
+      total: number;
+      used: number;
+      avail: number;
+      percent: number;
+    }[];
   }[]>;
 
   // Optional VNC and details methods

@@ -753,6 +753,38 @@ export default function VMsPage() {
                             ></div>
                           </div>
                         </div>
+
+                        {/* Volumes / Storages list */}
+                        {node.storages && node.storages.length > 0 && (
+                          <div className="pt-2.5 border-t border-border-color space-y-2">
+                            <span className="block text-[9px] font-black text-text-secondary uppercase tracking-wider">Volumes / Storages</span>
+                            <div className="space-y-1.5 max-h-[140px] overflow-y-auto pr-1">
+                              {node.storages.map((storage: any) => {
+                                const formatSizeGB = (bytes: number) => {
+                                  return `${Math.round(bytes / (1024 * 1024 * 1024))} GB`;
+                                };
+                                return (
+                                  <div key={storage.name} className="flex flex-col gap-1 p-2 bg-input-bg/30 border border-input-border/20 rounded-xl text-[10px] transition-colors hover:bg-input-bg/50">
+                                    <div className="flex justify-between font-bold text-text-primary">
+                                      <span className="truncate">{storage.name} <span className="text-text-muted text-[8px] font-normal">({storage.type})</span></span>
+                                      <span>{storage.percent}%</span>
+                                    </div>
+                                    <div className="w-full bg-input-bg h-1 rounded-full overflow-hidden">
+                                      <div 
+                                        className={`h-full transition-all duration-300 ${getUsageColorClass(storage.percent)}`}
+                                        style={{ width: `${storage.percent}%` }}
+                                      ></div>
+                                    </div>
+                                    <div className="flex justify-between text-[8px] text-text-muted">
+                                      <span>{formatSizeGB(storage.used)} usado</span>
+                                      <span>{formatSizeGB(storage.total)} total</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ) : (
                       <div className="text-xs text-text-muted italic py-2">
