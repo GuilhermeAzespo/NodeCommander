@@ -157,7 +157,12 @@ function runUpdateInBackground() {
     } catch (err) {}
   };
 
+  const appDir = process.cwd();
+  const currentUser = process.env.USER || process.env.LOGNAME || "uc";
+
   const steps = [
+    // Fix ownership first so git/npm/prisma don't fail due to root-owned files
+    { cmd: "bash", args: ["-c", `chown -R ${currentUser}:${currentUser} ${appDir} 2>/dev/null || true`] },
     { cmd: "git", args: ["checkout", "."] },
     { cmd: "git", args: ["pull"] },
     { cmd: "npm", args: ["install"] },
@@ -172,8 +177,18 @@ function runUpdateInBackground() {
     if (currentStep >= steps.length) {
       logStream("\nBuild concluído com sucesso! Reiniciando o servidor...\n");
       setFinalStatus("success");
-      
-      // Trigger PM2 restart in a separate process that executes after 2 seconds
+
+      // Fix ownership one more time after build (next artifacts may be root-owned)
+      try {
+        const fixProc = spawn("bash", ["-c", `chown -R ${currentUser}:${currentUser} ${appDir}/.next ${appDir}/src/generated 2>/dev/null || true`], {
+          detached: true,
+          stdio: "ignore",
+          shell: false
+        });
+        fixProc.unref();
+      } catch (_) {}
+
+      // Trigger PM2 restart after 3 seconds
       setTimeout(() => {
         const restartProc = spawn("pm2", ["restart", "node-commander"], {
           detached: true,
@@ -181,14 +196,18 @@ function runUpdateInBackground() {
           shell: true
         });
         restartProc.unref();
-      }, 2000);
+      }, 3000);
       return;
     }
 
     const step = steps[currentStep];
     logStream(`\n> Executando: ${step.cmd} ${step.args.join(" ")}\n`);
 
-    const proc = spawn(step.cmd, step.args, { shell: true });
+    const proc = spawn(step.cmd, step.args, {
+      shell: false,
+      cwd: appDir,
+      env: { ...process.env, PATH: process.env.PATH || "/usr/local/bin:/usr/bin:/bin" }
+    });
 
     proc.stdout.on("data", (data) => {
       logStream(data.toString());
@@ -201,7 +220,7 @@ function runUpdateInBackground() {
     proc.on("close", (code) => {
       if (code !== 0) {
         logStream(`\nErro: O comando falhou com o código ${code}\n`);
-        setFinalStatus("failed", `Falha ao executar ${step.cmd}`);
+        setFinalStatus("failed", `Falha ao executar ${step.cmd} ${step.args.join(" ")}`);
       } else {
         currentStep++;
         executeNext();
