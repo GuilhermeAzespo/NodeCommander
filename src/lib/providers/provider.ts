@@ -81,4 +81,6 @@ export interface HypervisorProvider {
   createSnapshot?(vmId: string, name: string, description?: string, vmstate?: boolean): Promise<boolean>;
   rollbackSnapshot?(vmId: string, snapName: string): Promise<boolean>;
   deleteSnapshot?(vmId: string, snapName: string): Promise<boolean>;
+
+  getAuthHeaders?(): Promise<Record<string, string>>;
 }
