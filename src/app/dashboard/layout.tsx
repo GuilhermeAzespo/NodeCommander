@@ -12,7 +12,8 @@ import {
   Terminal,
   RefreshCw,
   Activity,
-  TerminalSquare
+  TerminalSquare,
+  ShieldCheck
 } from "lucide-react";
 import ActiveLink from "./ActiveLink";
 import ThemeToggle from "@/components/ThemeToggle";
@@ -100,6 +101,10 @@ export default async function DashboardLayout({
               <ActiveLink href="/dashboard/smtp">
                 <Mail className="w-5 h-5" />
                 <span>Configurações SMTP</span>
+              </ActiveLink>
+              <ActiveLink href="/dashboard/auth-integrations">
+                <ShieldCheck className="w-5 h-5" />
+                <span>Integrações de Login</span>
               </ActiveLink>
               <ActiveLink href="/dashboard/update">
                 <RefreshCw className="w-5 h-5" />
