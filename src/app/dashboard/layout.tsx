@@ -125,6 +125,13 @@ export default async function DashboardLayout({
           </div>
           <div className="flex items-center gap-1.5 shrink-0">
             <ThemeToggle />
+            <Link
+              href="/dashboard/security"
+              title="Minha Segurança"
+              className="p-2.5 bg-bg-primary hover:bg-blue-500/10 border border-border-color hover:border-blue-500/30 text-text-secondary hover:text-blue-500 rounded-xl transition-all flex items-center justify-center"
+            >
+              <ShieldCheck className="w-4 h-4" />
+            </Link>
             <form action="/api/auth/logout" method="POST">
               <button
                 type="submit"

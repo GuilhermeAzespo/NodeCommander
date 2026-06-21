@@ -6,6 +6,8 @@ import { Lock, Mail, Terminal, AlertCircle, Loader2 } from "lucide-react";
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [mfaCode, setMfaCode] = useState("");
+  const [requireMfa, setRequireMfa] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const router = useRouter();
@@ -16,19 +18,40 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
-      });
+      if (!requireMfa) {
+        // Passo 1: Validação de E-mail e Senha
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password }),
+        });
 
-      const data = await res.json();
+        const data = await res.json();
 
-      if (!res.ok) {
-        setError(data.error || "Credenciais incorretas ou erro de login.");
+        if (!res.ok) {
+          setError(data.error || "Credenciais incorretas ou erro de login.");
+        } else if (data.requireMfa) {
+          setRequireMfa(true);
+        } else {
+          router.push("/dashboard");
+          router.refresh();
+        }
       } else {
-        router.push("/dashboard");
-        router.refresh();
+        // Passo 2: Validação de MFA
+        const res = await fetch("/api/auth/login/mfa", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: mfaCode }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok) {
+          setError(data.error || "Código MFA incorreto.");
+        } else {
+          router.push("/dashboard");
+          router.refresh();
+        }
       }
     } catch (err) {
       setError("Erro de rede. Verifique sua conexão.");
@@ -44,13 +67,15 @@ export default function LoginPage() {
       <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-violet-500/5 dark:bg-violet-600/10 rounded-full blur-3xl -z-10 pointer-events-none" />
  
       {/* Main card */}
-      <div className="w-full max-w-md bg-bg-secondary/60 backdrop-blur-md border border-border-color p-8 rounded-2xl shadow-xl relative">
+      <div className="w-full max-w-md bg-bg-secondary/60 backdrop-blur-md border border-border-color p-8 rounded-2xl shadow-xl relative overflow-hidden">
         <div className="flex flex-col items-center mb-8">
           <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl mb-4 text-blue-500">
             <Terminal className="w-8 h-8" />
           </div>
           <h1 className="text-2xl font-bold text-text-primary tracking-tight">NodeCommander</h1>
-          <p className="text-text-secondary text-sm mt-1">Gerenciador Central de Hypervisors</p>
+          <p className="text-text-secondary text-sm mt-1">
+            {requireMfa ? "Verificação em Duas Etapas" : "Gerenciador Central de Hypervisors"}
+          </p>
         </div>
  
         {error && (
@@ -61,44 +86,68 @@ export default function LoginPage() {
         )}
  
         <form onSubmit={handleLogin} className="space-y-5">
-          <div>
-            <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">
-              E-mail
-            </label>
-            <div className="relative">
-              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted w-5 h-5" />
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="admin@nodecommander.com"
-                className="w-full pl-11 pr-4 py-3 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 transition-colors"
-              />
+          {/* O container desliza baseado no requireMfa */}
+          <div className="relative">
+            <div className={`transition-transform duration-500 ease-in-out ${requireMfa ? '-translate-x-full absolute opacity-0 pointer-events-none' : 'translate-x-0 opacity-100'} w-full space-y-5`}>
+              <div>
+                <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">
+                  E-mail
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted w-5 h-5" />
+                  <input
+                    type="email"
+                    required={!requireMfa}
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="admin@nodecommander.com"
+                    className="w-full pl-11 pr-4 py-3 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                </div>
+              </div>
+    
+              <div>
+                <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">
+                  Senha
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted w-5 h-5" />
+                  <input
+                    type="password"
+                    required={!requireMfa}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    className="w-full pl-11 pr-4 py-3 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                </div>
+              </div>
             </div>
-          </div>
- 
-          <div>
-            <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2">
-              Senha
-            </label>
-            <div className="relative">
-              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-text-muted w-5 h-5" />
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="w-full pl-11 pr-4 py-3 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 transition-colors"
-              />
+
+            <div className={`transition-transform duration-500 ease-in-out ${!requireMfa ? 'translate-x-full absolute opacity-0 pointer-events-none top-0' : 'translate-x-0 opacity-100'} w-full space-y-5`}>
+              <div>
+                <label className="block text-text-secondary text-xs font-semibold uppercase tracking-wider mb-2 text-center">
+                  Código do Authenticator
+                </label>
+                <div className="relative flex justify-center">
+                  <input
+                    type="text"
+                    required={requireMfa}
+                    maxLength={6}
+                    value={mfaCode}
+                    onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
+                    placeholder="000000"
+                    className="w-3/4 text-center text-3xl tracking-widest px-4 py-4 bg-input-bg border border-input-border rounded-xl text-text-primary placeholder-text-muted focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                </div>
+              </div>
             </div>
           </div>
  
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-medium rounded-xl transition-colors shadow-lg shadow-blue-900/10 dark:shadow-blue-900/30 flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-3 bg-blue-600 hover:bg-blue-500 disabled:bg-blue-800 text-white font-medium rounded-xl transition-colors shadow-lg shadow-blue-900/10 dark:shadow-blue-900/30 flex items-center justify-center gap-2 cursor-pointer mt-6"
           >
             {loading ? (
               <>
@@ -106,7 +155,7 @@ export default function LoginPage() {
                 <span>Autenticando...</span>
               </>
             ) : (
-              <span>Entrar no Painel</span>
+              <span>{requireMfa ? "Validar Código" : "Entrar no Painel"}</span>
             )}
           </button>
         </form>

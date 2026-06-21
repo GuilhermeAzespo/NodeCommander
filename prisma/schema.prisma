@@ -17,6 +17,8 @@ model User {
   passwordHash String
   role         String        // "ADMIN", "OPERATOR", "VIEWER"
   authSource   String        @default("LOCAL") // "LOCAL", "AD", "GOOGLE", "M365"
+  mfaEnabled   Boolean       @default(false)
+  mfaSecret    String?
   permissions  Permission[]
   logs         ActivityLog[]
   createdAt    DateTime      @default(now())

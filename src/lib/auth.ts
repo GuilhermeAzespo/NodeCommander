@@ -48,6 +48,7 @@ export async function getCurrentUser() {
         email: true,
         name: true,
         role: true,
+        mfaEnabled: true,
       }
     });
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { comparePassword, loginUser } from "@/lib/auth";
+import { comparePassword, loginUser, signToken } from "@/lib/auth";
+import { cookies } from "next/headers";
 
 // Rate limit na memória (em produção usar Redis/DB)
 const rateLimit = new Map<string, { count: number; resetTime: number }>();
@@ -62,7 +63,26 @@ export async function POST(req: Request) {
       );
     }
 
-    // Login com sucesso: reseta as tentativas
+    // Se MFA estiver habilitado, envia um token temporário e não faz o login final
+    if (user.mfaEnabled) {
+      const tempToken = await signToken({ userId: user.id, role: user.role });
+      // Podemos enviar o token temporário via HttpOnly cookie seguro para o próximo passo ler
+      const cookieStore = await cookies();
+      cookieStore.set("nodecommander_mfa_pending", tempToken, {
+        httpOnly: true,
+        secure: false, // Em prod usar true
+        sameSite: "lax",
+        maxAge: 5 * 60, // 5 minutos para colocar o código
+        path: "/",
+      });
+
+      return NextResponse.json({
+        requireMfa: true,
+        userId: user.id,
+      });
+    }
+
+    // Login com sucesso (Sem MFA): reseta as tentativas
     rateLimit.delete(ip);
 
     // Set HttpOnly cookie
