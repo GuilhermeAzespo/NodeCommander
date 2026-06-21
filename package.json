@@ -1,6 +1,6 @@
 {
   "name": "node-commander",
-  "version": "0.2.57",
+  "version": "0.2.58",
   "private": true,
   "scripts": {
     "predev": "node check-env.js",
@@ -28,6 +28,7 @@
     "qrcode": "^1.5.3",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "recharts": "^2.15.1",
     "ssh2": "^1.17.0",
     "tailwindcss": "^4",
     "ws": "^8.21.0",

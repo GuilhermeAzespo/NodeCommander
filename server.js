@@ -286,5 +286,27 @@ app.prepare().then(() => {
     console.log(`> Ready on http://${hostname}:${port}`);
     console.log(`> VNC Proxy enabled on /api/vncproxy`);
     console.log(`> SSH Proxy enabled on /api/sshproxy`);
+    
+    // ─── Background Metrics Collector (Runs every 15 minutes) ─────────────────
+    const CRON_INTERVAL = 15 * 60 * 1000;
+    setInterval(async () => {
+      try {
+        const token = process.env.INTERNAL_CRON_TOKEN || 'nodecommander_cron_secret';
+        const res = await fetch(`http://${hostname}:${port}/api/internal/metrics-collector`, {
+          method: 'POST',
+          headers: {
+            'x-internal-token': token
+          }
+        });
+        if (res.ok) {
+          console.log(`[Cron] Collected cluster metrics successfully at ${new Date().toISOString()}`);
+        } else {
+          console.error(`[Cron] Failed to collect metrics: ${res.status}`);
+        }
+      } catch (err) {
+        console.error(`[Cron] Error running metrics collector:`, err.message);
+      }
+    }, CRON_INTERVAL);
+    
   });
 });

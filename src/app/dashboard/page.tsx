@@ -11,6 +11,7 @@ import {
   User as UserIcon,
   Clock
 } from "lucide-react";
+import DashboardCharts from "@/components/DashboardCharts";
 
 // Force dynamic rendering since we are checking real-time statuses and logs
 export const dynamic = "force-dynamic";
@@ -130,6 +131,9 @@ export default async function DashboardPage() {
           </div>
         </div>
       </div>
+
+      {/* Historical Charts */}
+      <DashboardCharts />
 
       {/* Content Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
