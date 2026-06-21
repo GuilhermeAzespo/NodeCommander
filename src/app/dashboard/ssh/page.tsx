@@ -1,7 +1,7 @@
 "use client";
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
-  TerminalSquare, Plus, Trash2, Edit2, Server, Loader2,
+  TerminalSquare, Plus, Trash2, Edit2, Loader2,
   CheckCircle2, AlertCircle, X, Wifi, WifiOff, Save, Eye, EyeOff, RefreshCw
 } from "lucide-react";
 import SshTerminal from "@/components/SshTerminal";
@@ -15,18 +15,18 @@ interface SshSession {
   createdAt: string;
 }
 
-interface TerminalLine {
-  text: string;
-  type: "output" | "error" | "system";
-}
+type ConnectionStatus = "connecting" | "connected" | "disconnected" | "error";
 
 export default function SshConsolePage() {
   const [sessions, setSessions] = useState<SshSession[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeSession, setActiveSession] = useState<SshSession | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<"idle" | "connecting" | "connected" | "disconnected" | "error">("idle");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  // Multisession state
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [sessionStatuses, setSessionStatuses] = useState<Record<string, ConnectionStatus>>({});
+  const wsRefs = useRef<Record<string, WebSocket>>({});
 
   // Form state
   const [showForm, setShowForm] = useState(false);
@@ -39,12 +39,7 @@ export default function SshConsolePage() {
   const [showPass, setShowPass] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
 
-  // Terminal state
-  const [wsRef] = useState<{ current: WebSocket | null }>({ current: null });
-
   useEffect(() => { fetchSessions(); }, []);
-
-  // removed terminal lines scroll effect
 
   const fetchSessions = async () => {
     setLoading(true);
@@ -97,22 +92,39 @@ export default function SshConsolePage() {
     if (!confirm("Deletar esta sessão SSH?")) return;
     try {
       await fetch(`/api/ssh/sessions?id=${id}`, { method: "DELETE" });
-      if (activeSession?.id === id) disconnect();
+      closeTab(id);
       fetchSessions();
     } catch { setError("Falha ao deletar sessão."); }
   };
 
-  // removed addLine
-
-  const disconnect = useCallback(() => {
-    if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
-    setConnectionStatus("disconnected");
-  }, [wsRef]);
+  const closeTab = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (wsRefs.current[id]) {
+      wsRefs.current[id].close();
+      delete wsRefs.current[id];
+    }
+    setSessionStatuses(prev => {
+      const newSt = { ...prev };
+      delete newSt[id];
+      return newSt;
+    });
+    if (activeSessionId === id) setActiveSessionId(null);
+  };
 
   const connect = async (session: SshSession) => {
-    if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
-    setActiveSession(session);
-    setConnectionStatus("connecting");
+    // Se já existe uma conexão rodando (ou conectando), apenas foca nela
+    if (wsRefs.current[session.id] && (sessionStatuses[session.id] === "connected" || sessionStatuses[session.id] === "connecting")) {
+      setActiveSessionId(session.id);
+      return;
+    }
+
+    // Se havia uma morta, limpa antes
+    if (wsRefs.current[session.id]) {
+      wsRefs.current[session.id].close();
+    }
+
+    setActiveSessionId(session.id);
+    setSessionStatuses(prev => ({ ...prev, [session.id]: "connecting" }));
     setError("");
 
     try {
@@ -126,31 +138,45 @@ export default function SshConsolePage() {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       const wsUrl = `${protocol}//${window.location.host}/api/sshproxy?sessionId=${session.id}&authToken=${tokenData.authToken}`;
       const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+      wsRefs.current[session.id] = ws;
 
       ws.addEventListener("message", (evt) => {
         try {
           const msg = JSON.parse(evt.data);
           if (msg.type === "status") {
-            if (msg.message === "connected") setConnectionStatus("connected");
-            else if (msg.message === "disconnected") setConnectionStatus("disconnected");
+            setSessionStatuses(prev => ({ ...prev, [session.id]: msg.message }));
           } else if (msg.type === "error") {
-            setConnectionStatus("error"); setError(msg.message);
+            setSessionStatuses(prev => ({ ...prev, [session.id]: "error" }));
+            setError(`[${session.name}] ${msg.message}`);
           }
         } catch {}
       });
 
-      ws.addEventListener("close", () => { setConnectionStatus("disconnected"); wsRef.current = null; });
-      ws.addEventListener("error", () => { setConnectionStatus("error"); setError("Erro de WebSocket."); });
+      ws.addEventListener("close", () => {
+        setSessionStatuses(prev => ({ ...prev, [session.id]: "disconnected" }));
+        delete wsRefs.current[session.id];
+      });
+      ws.addEventListener("error", () => {
+        setSessionStatuses(prev => ({ ...prev, [session.id]: "error" }));
+        delete wsRefs.current[session.id];
+      });
     } catch (err: any) {
-      setConnectionStatus("error"); setError(err.message);
+      setSessionStatuses(prev => ({ ...prev, [session.id]: "error" }));
+      setError(`[${session.name}] ${err.message}`);
     }
   };
 
-  // removed sendInput
+  const activeSession = sessions.find(s => s.id === activeSessionId) || null;
+  const activeStatus = activeSessionId ? (sessionStatuses[activeSessionId] || "idle") : "idle";
 
-  const statusColor = { idle: "text-text-muted", connecting: "text-amber-400", connected: "text-emerald-400", disconnected: "text-text-muted", error: "text-rose-400" }[connectionStatus];
-  const statusLabel = { idle: "Sem conexão", connecting: "Conectando...", connected: "Conectado", disconnected: "Desconectado", error: "Erro" }[connectionStatus];
+  const statusColorMap: Record<string, string> = { idle: "text-text-muted", connecting: "text-amber-400", connected: "text-emerald-400", disconnected: "text-text-muted", error: "text-rose-400" };
+  const statusLabelMap: Record<string, string> = { idle: "Sem conexão", connecting: "Conectando...", connected: "Conectado", disconnected: "Desconectado", error: "Erro" };
+  
+  const statusColor = statusColorMap[activeStatus] || "text-text-muted";
+  const statusLabel = statusLabelMap[activeStatus] || "Sem conexão";
+
+  // Retorna todas as chaves do sessionStatuses onde o socket está tecnicamente tentado
+  const openTabs = Object.keys(sessionStatuses);
 
   return (
     <div className="space-y-6 h-full flex flex-col">
@@ -185,7 +211,7 @@ export default function SshConsolePage() {
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-6 min-h-0">
         {/* Sessions list */}
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 overflow-y-auto pr-2">
           <h2 className="text-xs font-black text-text-muted uppercase tracking-wider px-1">Sessões Salvas</h2>
           {loading ? (
             <div className="flex items-center justify-center py-10"><Loader2 className="w-6 h-6 text-emerald-500 animate-spin" /></div>
@@ -197,44 +223,58 @@ export default function SshConsolePage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {sessions.map((s) => (
-                <div key={s.id} className={`p-4 rounded-xl border transition-all ${activeSession?.id === s.id ? "border-emerald-500 bg-emerald-500/5 shadow-sm shadow-emerald-500/10" : "border-border-color bg-bg-secondary hover:border-border-color/60"}`}>
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <div className="flex-1 min-w-0">
-                      <p className="font-bold text-text-primary text-sm truncate">{s.name}</p>
-                      <p className="text-text-secondary text-[11px] truncate">{s.username}@{s.host}:{s.port}</p>
+              {sessions.map((s) => {
+                const sStatus = sessionStatuses[s.id];
+                const isActive = activeSessionId === s.id;
+                const isConnectedOrConnecting = sStatus === "connected" || sStatus === "connecting";
+                
+                return (
+                  <div key={s.id} className={`p-4 rounded-xl border transition-all ${isActive ? "border-emerald-500 bg-emerald-500/5 shadow-sm shadow-emerald-500/10" : "border-border-color bg-bg-secondary hover:border-border-color/60"}`}>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-text-primary text-sm truncate flex items-center gap-2">
+                          {s.name}
+                          {sStatus === "connected" && <span className="w-2 h-2 rounded-full bg-emerald-500"></span>}
+                        </p>
+                        <p className="text-text-secondary text-[11px] truncate">{s.username}@{s.host}:{s.port}</p>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button onClick={() => openEditForm(s)} className="p-1.5 rounded-lg hover:bg-bg-primary text-text-muted hover:text-text-primary transition-colors cursor-pointer" title="Editar"><Edit2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => handleDelete(s.id)} className="p-1.5 rounded-lg hover:bg-red-500/10 text-text-muted hover:text-red-400 transition-colors cursor-pointer" title="Deletar"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button onClick={() => openEditForm(s)} className="p-1.5 rounded-lg hover:bg-bg-primary text-text-muted hover:text-text-primary transition-colors cursor-pointer" title="Editar"><Edit2 className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => handleDelete(s.id)} className="p-1.5 rounded-lg hover:bg-red-500/10 text-text-muted hover:text-red-400 transition-colors cursor-pointer" title="Deletar"><Trash2 className="w-3.5 h-3.5" /></button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => connect(s)}
+                        disabled={sStatus === "connecting"}
+                        className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${isActive && isConnectedOrConnecting ? "bg-emerald-500/20 text-emerald-400" : "bg-emerald-600 hover:bg-emerald-500 text-white"}`}
+                      >
+                        {sStatus === "connecting" ? (
+                          <><Loader2 className="w-3 h-3 animate-spin" /><span>Conectando...</span></>
+                        ) : isConnectedOrConnecting ? (
+                          <><Eye className="w-3 h-3" /><span>Focar Aba</span></>
+                        ) : (
+                          <><Wifi className="w-3 h-3" /><span>Conectar</span></>
+                        )}
+                      </button>
+                      {isConnectedOrConnecting && (
+                        <button 
+                          onClick={(e) => closeTab(s.id, e)}
+                          className="py-1.5 px-2.5 rounded-lg text-xs transition-all flex items-center justify-center cursor-pointer bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20"
+                          title="Desconectar"
+                        >
+                          <WifiOff className="w-3 h-3" />
+                        </button>
+                      )}
                     </div>
                   </div>
-                  <button
-                    onClick={() => {
-                      if (activeSession?.id === s.id && connectionStatus === "connected") {
-                        disconnect();
-                      } else {
-                        connect(s);
-                      }
-                    }}
-                    disabled={connectionStatus === "connecting"}
-                    className={`w-full py-1.5 px-3 rounded-lg text-xs font-semibold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${activeSession?.id === s.id && connectionStatus === "connected" ? "bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20" : "bg-emerald-600 hover:bg-emerald-500 text-white"}`}
-                  >
-                    {connectionStatus === "connecting" && activeSession?.id === s.id ? (
-                      <><Loader2 className="w-3 h-3 animate-spin" /><span>Conectando...</span></>
-                    ) : activeSession?.id === s.id && connectionStatus === "connected" ? (
-                      <><WifiOff className="w-3 h-3" /><span>Desconectar</span></>
-                    ) : (
-                      <><Wifi className="w-3 h-3" /><span>Conectar</span></>
-                    )}
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* Terminal */}
+        {/* Terminal Area */}
         <div className="flex flex-col bg-bg-secondary border border-border-color rounded-2xl overflow-hidden min-h-0 h-full">
           {/* Terminal header */}
           <div className="flex items-center justify-between px-4 py-3 bg-bg-primary/60 border-b border-border-color">
@@ -245,37 +285,47 @@ export default function SshConsolePage() {
                 <div className="w-3 h-3 rounded-full bg-emerald-500/60" />
               </div>
               <span className="text-text-secondary text-xs font-mono">
-                {activeSession ? `${activeSession.username}@${activeSession.host}` : "Nenhuma sessão ativa"}
+                {activeSession ? `${activeSession.username}@${activeSession.host}` : "Nenhuma aba focada"}
               </span>
             </div>
             <div className="flex items-center gap-3">
               <span className={`text-[10px] font-bold flex items-center gap-1.5 ${statusColor}`}>
-                <span className={`w-1.5 h-1.5 rounded-full ${connectionStatus === "connected" ? "bg-emerald-400 animate-pulse" : connectionStatus === "connecting" ? "bg-amber-400 animate-pulse" : connectionStatus === "error" ? "bg-rose-400" : "bg-text-muted"}`} />
+                <span className={`w-1.5 h-1.5 rounded-full ${activeStatus === "connected" ? "bg-emerald-400 animate-pulse" : activeStatus === "connecting" ? "bg-amber-400 animate-pulse" : activeStatus === "error" ? "bg-rose-400" : "bg-text-muted"}`} />
                 {statusLabel}
               </span>
-              {connectionStatus === "connected" && (
-                <button onClick={() => activeSession && connect(activeSession)} className="p-1.5 rounded-lg hover:bg-bg-secondary text-text-muted hover:text-text-primary transition-colors cursor-pointer" title="Reconectar">
+              {activeStatus === "connected" && activeSession && (
+                <button onClick={() => { closeTab(activeSession.id); connect(activeSession); }} className="p-1.5 rounded-lg hover:bg-bg-secondary text-text-muted hover:text-text-primary transition-colors cursor-pointer" title="Reconectar">
                   <RefreshCw className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
           </div>
 
-          {/* Terminal body */}
-          {connectionStatus === "idle" ? (
-            <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8 bg-[#0d1117] rounded-b-2xl">
-              <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
-                <TerminalSquare className="w-10 h-10 text-emerald-500" />
+          {/* Terminal body - renderiza múltiplos Xterms e usa display none para abas inativas */}
+          <div className="flex-1 flex flex-col relative min-h-0 h-full bg-[#0d1117]">
+            {openTabs.length === 0 || !activeSessionId ? (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 p-8">
+                <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
+                  <TerminalSquare className="w-10 h-10 text-emerald-500" />
+                </div>
+                <div className="text-center">
+                  <p className="text-emerald-400 font-bold">Console Multi-Sessões</p>
+                  <p className="text-text-muted text-sm mt-1">Conecte-se em múltiplos servidores ao mesmo tempo.</p>
+                </div>
+                <p className="text-text-muted text-xs font-mono opacity-50 animate-pulse">{'>'} _</p>
               </div>
-              <div className="text-center">
-                <p className="text-emerald-400 font-bold">Console SSH Pronto</p>
-                <p className="text-text-muted text-sm mt-1">Selecione uma sessão à esquerda e clique em <strong className="text-text-secondary">Conectar</strong></p>
-              </div>
-              <p className="text-text-muted text-xs font-mono opacity-50 animate-pulse">{'>'} _</p>
-            </div>
-          ) : (
-            <SshTerminal ws={wsRef.current} onDisconnect={disconnect} />
-          )}
+            ) : (
+              openTabs.map(tabId => (
+                <div key={tabId} className={`absolute inset-0 ${activeSessionId === tabId ? "block" : "hidden"}`}>
+                  <SshTerminal 
+                    ws={wsRefs.current[tabId]} 
+                    onDisconnect={() => closeTab(tabId)} 
+                    isActive={activeSessionId === tabId} 
+                  />
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
 

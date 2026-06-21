@@ -7,11 +7,27 @@ import "xterm/css/xterm.css";
 interface SshTerminalProps {
   ws: WebSocket | null;
   onDisconnect: () => void;
+  isActive?: boolean;
 }
 
-export default function SshTerminal({ ws, onDisconnect }: SshTerminalProps) {
+export default function SshTerminal({ ws, onDisconnect, isActive = true }: SshTerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
+  const onDisconnectRef = useRef(onDisconnect);
+
+  useEffect(() => {
+    onDisconnectRef.current = onDisconnect;
+  }, [onDisconnect]);
+
+  useEffect(() => {
+    if (isActive) {
+      setTimeout(() => {
+        try {
+          fitAddonRef.current?.fit();
+        } catch (e) {}
+      }, 50);
+    }
+  }, [isActive]);
 
   useEffect(() => {
     if (!terminalRef.current || !ws) return;
@@ -66,7 +82,7 @@ export default function SshTerminal({ ws, onDisconnect }: SshTerminalProps) {
           term.write(bytes);
         } else if (msg.type === "status" && msg.message === "disconnected") {
           term.write("\r\nConexão encerrada.\r\n");
-          onDisconnect();
+          onDisconnectRef.current();
         } else if (msg.type === "error") {
           term.write(`\r\nErro: ${msg.message}\r\n`);
         }
@@ -76,16 +92,25 @@ export default function SshTerminal({ ws, onDisconnect }: SshTerminalProps) {
     };
     
     ws.addEventListener("message", msgHandler);
-    ws.addEventListener("close", onDisconnect);
+    
+    const handleClose = () => onDisconnectRef.current();
+    ws.addEventListener("close", handleClose);
+
+    const keepaliveInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "keepalive" }));
+      }
+    }, 15000);
 
     return () => {
       window.removeEventListener("resize", handleResize);
       onDataDisposable.dispose();
       ws.removeEventListener("message", msgHandler);
-      ws.removeEventListener("close", onDisconnect);
+      ws.removeEventListener("close", handleClose);
+      clearInterval(keepaliveInterval);
       term.dispose();
     };
-  }, [ws, onDisconnect]);
+  }, [ws]);
 
   return (
     <div className="w-full h-full p-2 bg-[#0d1117] rounded-b-2xl overflow-hidden">
