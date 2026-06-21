@@ -82,6 +82,7 @@ export class ProxmoxProvider implements HypervisorProvider {
         method,
         headers,
         agent,
+        timeout: 5000,
       };
 
       const req = https.request(url, options, (res) => {
@@ -103,6 +104,11 @@ export class ProxmoxProvider implements HypervisorProvider {
 
       req.on("error", (err) => {
         reject(err);
+      });
+
+      req.on("timeout", () => {
+        req.destroy();
+        reject(new Error("Proxmox API request timed out"));
       });
 
       if (requestBody !== null) {
@@ -130,6 +136,7 @@ export class ProxmoxProvider implements HypervisorProvider {
           "Content-Length": Buffer.byteLength(reqBody),
         },
         agent,
+        timeout: 5000,
       };
 
       const req = https.request(url, options, (res) => {
@@ -153,6 +160,11 @@ export class ProxmoxProvider implements HypervisorProvider {
       });
 
       req.on("error", (err) => reject(err));
+      req.on("timeout", () => {
+        req.destroy();
+        reject(new Error("Proxmox login request timed out"));
+      });
+      
       req.write(reqBody);
       req.end();
     });
