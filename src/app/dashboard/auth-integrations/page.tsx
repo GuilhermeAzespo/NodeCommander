@@ -13,7 +13,8 @@ import {
   Lock,
   EyeOff,
   Eye,
-  Save
+  Save,
+  Wifi
 } from "lucide-react";
 import ConfirmModal from "@/components/ConfirmModal";
 
@@ -21,6 +22,7 @@ export default function AuthIntegrationsPage() {
   const [activeTab, setActiveTab] = useState<"AD" | "GOOGLE" | "M365">("AD");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [showPass, setShowPass] = useState(false);
@@ -58,6 +60,34 @@ export default function AuthIntegrationsPage() {
   const openSaveConfirm = (e: React.FormEvent) => {
     e.preventDefault();
     setConfirmDialog({ isOpen: true });
+  };
+
+  const handleTestConnection = async () => {
+    setTesting(true);
+    setError("");
+    setSuccess("");
+
+    let payload;
+    if (activeTab === "AD") payload = { type: "AD", config: adConfig };
+    else if (activeTab === "GOOGLE") payload = { type: "GOOGLE", config: googleConfig };
+    else if (activeTab === "M365") payload = { type: "M365", config: m365Config };
+
+    try {
+      const res = await fetch("/api/admin/auth-settings/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao testar conexão.");
+      
+      setSuccess(data.message || "Conexão testada com sucesso!");
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setTesting(false);
+    }
   };
 
   const handleSave = async () => {
@@ -297,11 +327,20 @@ export default function AuthIntegrationsPage() {
                 </div>
               )}
 
-              <div className="flex justify-end pt-6 border-t border-border-color">
+              <div className="flex flex-col sm:flex-row justify-end pt-6 border-t border-border-color gap-3">
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={testing || saving}
+                  className="bg-bg-tertiary hover:bg-bg-primary text-text-primary border border-border-color px-6 py-2.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  {testing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Wifi className="w-4 h-4" />}
+                  Testar Conexão
+                </button>
                 <button
                   type="submit"
-                  disabled={saving}
-                  className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-50 flex items-center gap-2 cursor-pointer shadow-lg shadow-blue-500/20"
+                  disabled={saving || testing}
+                  className="bg-blue-600 hover:bg-blue-500 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-blue-500/20"
                 >
                   {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                   Salvar Configurações
