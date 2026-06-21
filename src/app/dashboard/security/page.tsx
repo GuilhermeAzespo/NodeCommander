@@ -12,6 +12,7 @@ export default function SecuritySettingsPage() {
   const [error, setError] = useState("");
   const [step, setStep] = useState(0); // 0: Idle, 1: Setup
   const [actionLoading, setActionLoading] = useState(false);
+  const [showDisableConfirm, setShowDisableConfirm] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -65,7 +66,7 @@ export default function SecuritySettingsPage() {
   };
 
   const handleDisableMfa = async () => {
-    if (!confirm("Tem certeza que deseja desativar a autenticação em duas etapas?")) return;
+    setShowDisableConfirm(false);
     setActionLoading(true);
     setError("");
     try {
@@ -138,7 +139,7 @@ export default function SecuritySettingsPage() {
 
             {mfaEnabled && (
               <button
-                onClick={handleDisableMfa}
+                onClick={() => setShowDisableConfirm(true)}
                 disabled={actionLoading}
                 className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 rounded-lg text-sm font-medium transition flex items-center gap-2 disabled:opacity-50"
               >
@@ -197,6 +198,34 @@ export default function SecuritySettingsPage() {
           </div>
         )}
       </div>
+
+      {showDisableConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-bg-secondary border border-border-color rounded-2xl p-6 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-200">
+            <h3 className="text-xl font-bold text-text-primary mb-2 flex items-center gap-2">
+              <AlertCircle className="w-6 h-6 text-red-500" />
+              Desativar 2FA?
+            </h3>
+            <p className="text-text-secondary mb-6">
+              Tem certeza que deseja desativar a autenticação em duas etapas? Sua conta ficará menos segura e protegida apenas por senha.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setShowDisableConfirm(false)}
+                className="px-4 py-2 bg-bg-tertiary hover:bg-bg-primary text-text-primary border border-border-color rounded-lg font-medium transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleDisableMfa}
+                className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg font-medium transition shadow-lg shadow-red-500/20"
+              >
+                Sim, Desativar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
