@@ -1,0 +1,111 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  name         String
+  passwordHash String
+  role         String        // "ADMIN", "OPERATOR", "VIEWER"
+  authSource   String        @default("LOCAL") // "LOCAL", "AD", "GOOGLE", "M365"
+  mfaEnabled   Boolean       @default(false)
+  mfaSecret    String?
+  permissions  Permission[]
+  logs         ActivityLog[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Hypervisor {
+  id          String        @id @default(uuid())
+  name        String
+  type        String        // "PROXMOX", "VMWARE", "HYPERV"
+  host        String        // IP ou FQDN (ex: https://192.168.1.100:8006)
+  port        Int           @default(8006)
+  username    String        // ex: root@pam ou api-user@pve
+  credential  String        // Senha ou Token criptografado
+  status      String        @default("UNKNOWN") // "ONLINE", "OFFLINE", "UNKNOWN"
+  nodeName    String        @default("pve")     // Nome do nó no Proxmox (ex: pve, node1)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  permissions Permission[]
+}
+
+model Permission {
+  id           String     @id @default(uuid())
+  userId       String
+  hypervisorId String
+  access       String     // "FULL", "CONTROL", "VIEW"
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hypervisor   Hypervisor @relation(fields: [hypervisorId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, hypervisorId])
+}
+
+model SystemSetting {
+  id    String @id @default("smtp_config")
+  key   String @unique
+  value String // Valor serializado JSON contendo a config SMTP
+}
+
+model ActivityLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String   // "CREATE_VM", "START_VM", "STOP_VM", "DELETE_VM", "ADD_HYPERVISOR", "UPDATE_SMTP"
+  details   String
+  timestamp DateTime @default(now())
+}
+
+model VmIPOverride {
+  id           String   @id @default(uuid())
+  hypervisorId String
+  vmId         String
+  ipAddress    String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([hypervisorId, vmId])
+}
+
+model VmTemplate {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  cpu         Int
+  memory      Int      // RAM em MB
+  disks       String   // Array de discos em JSON (ex: [{"storage":"local-lvm","size":40}])
+  iso         String?  // ISO opcional
+  node        String?  // Nó Proxmox opcional
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+
+model SshSession {
+  id        String   @id @default(uuid())
+  name      String
+  host      String
+  port      Int      @default(22)
+  username  String
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ClusterMetric {
+  id          String   @id @default(uuid())
+  timestamp   DateTime @default(now())
+  cpuUsage    Float    // Average CPU usage percentage
+  memUsage    Float    // Average memory usage percentage
+  totalVMs    Int      // Total virtual machines across cluster
+  runningVMs  Int      // Running virtual machines
+}
