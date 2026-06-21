@@ -1,5 +1,19 @@
-require('next/dist/lib/load-env-config').loadEnvConfig(process.cwd());
-
+const fs = require('fs');
+const path = require('path');
+try {
+  const envPath = path.join(process.cwd(), '.env');
+  const envFile = fs.readFileSync(envPath, 'utf8');
+  envFile.split('\n').forEach(line => {
+    const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+    if (match) {
+      let key = match[1];
+      let value = match[2] || '';
+      if (value.startsWith('"') && value.endsWith('"')) value = value.slice(1, -1);
+      else if (value.startsWith("'") && value.endsWith("'")) value = value.slice(1, -1);
+      if (!process.env[key]) process.env[key] = value;
+    }
+  });
+} catch (e) {}
 const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
