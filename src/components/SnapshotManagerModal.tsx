@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { Camera, Trash2, RotateCcw, X, Loader2, Plus, Info } from "lucide-react";
+import ConfirmModal from "./ConfirmModal";
 
 interface Snapshot {
   name: string;
@@ -29,6 +30,20 @@ export default function SnapshotManagerModal({
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [error, setError] = useState("");
+
+  const [confirmConfig, setConfirmConfig] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    actionType: "rollback" | "delete";
+    snapName: string;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    actionType: "rollback",
+    snapName: ""
+  });
 
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -85,7 +100,16 @@ export default function SnapshotManagerModal({
   };
 
   const handleRollback = async (snapName: string) => {
-    if (!confirm(`TEM CERTEZA? A VM será restaurada para o estado do snapshot '${snapName}'. Dados atuais serão perdidos.`)) return;
+    setConfirmConfig({
+      isOpen: true,
+      title: "Restaurar Snapshot",
+      message: `TEM CERTEZA? A VM será restaurada para o estado do snapshot '${snapName}'. Dados atuais serão perdidos.`,
+      actionType: "rollback",
+      snapName
+    });
+  };
+
+  const executeRollback = async (snapName: string) => {
     setActionLoading(`rollback-${snapName}`);
     setError("");
     try {
@@ -106,7 +130,16 @@ export default function SnapshotManagerModal({
   };
 
   const handleDelete = async (snapName: string) => {
-    if (!confirm(`Tem certeza que deseja excluir o snapshot '${snapName}'? Esta ação não pode ser desfeita.`)) return;
+    setConfirmConfig({
+      isOpen: true,
+      title: "Excluir Snapshot",
+      message: `Tem certeza que deseja excluir o snapshot '${snapName}'? Esta ação não pode ser desfeita.`,
+      actionType: "delete",
+      snapName
+    });
+  };
+
+  const executeDelete = async (snapName: string) => {
     setActionLoading(`delete-${snapName}`);
     setError("");
     try {
@@ -291,6 +324,20 @@ export default function SnapshotManagerModal({
           )}
         </div>
       </div>
+      
+      <ConfirmModal
+        isOpen={confirmConfig.isOpen}
+        title={confirmConfig.title}
+        message={confirmConfig.message}
+        variant="danger"
+        confirmText={confirmConfig.actionType === "rollback" ? "Restaurar" : "Excluir"}
+        onCancel={() => setConfirmConfig({ ...confirmConfig, isOpen: false })}
+        onConfirm={() => {
+          setConfirmConfig({ ...confirmConfig, isOpen: false });
+          if (confirmConfig.actionType === "rollback") executeRollback(confirmConfig.snapName);
+          if (confirmConfig.actionType === "delete") executeDelete(confirmConfig.snapName);
+        }}
+      />
     </div>
   );
 }
