@@ -4,6 +4,7 @@ import {
   TerminalSquare, Plus, Trash2, Edit2, Server, Loader2,
   CheckCircle2, AlertCircle, X, Wifi, WifiOff, Save, Eye, EyeOff, RefreshCw
 } from "lucide-react";
+import SshTerminal from "@/components/SshTerminal";
 
 interface SshSession {
   id: string;
@@ -39,19 +40,11 @@ export default function SshConsolePage() {
   const [formLoading, setFormLoading] = useState(false);
 
   // Terminal state
-  const [terminalLines, setTerminalLines] = useState<TerminalLine[]>([]);
-  const [inputLine, setInputLine] = useState("");
   const [wsRef] = useState<{ current: WebSocket | null }>({ current: null });
-  const terminalRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { fetchSessions(); }, []);
 
-  useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
-    }
-  }, [terminalLines]);
+  // removed terminal lines scroll effect
 
   const fetchSessions = async () => {
     setLoading(true);
@@ -109,9 +102,7 @@ export default function SshConsolePage() {
     } catch { setError("Falha ao deletar sessão."); }
   };
 
-  const addLine = useCallback((text: string, type: TerminalLine["type"] = "output") => {
-    setTerminalLines(prev => [...prev, { text, type }]);
-  }, []);
+  // removed addLine
 
   const disconnect = useCallback(() => {
     if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
@@ -121,10 +112,8 @@ export default function SshConsolePage() {
   const connect = async (session: SshSession) => {
     if (wsRef.current) { wsRef.current.close(); wsRef.current = null; }
     setActiveSession(session);
-    setTerminalLines([]);
     setConnectionStatus("connecting");
     setError("");
-    addLine(`Conectando a ${session.username}@${session.host}:${session.port}...`, "system");
 
     try {
       const tokenRes = await fetch("/api/ssh/token", {
@@ -139,36 +128,26 @@ export default function SshConsolePage() {
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
-      ws.onopen = () => addLine("WebSocket estabelecido. Aguardando SSH...", "system");
-
-      ws.onmessage = (evt) => {
+      ws.addEventListener("message", (evt) => {
         try {
           const msg = JSON.parse(evt.data);
-          if (msg.type === "data") {
-            const decoded = atob(msg.data);
-            addLine(decoded, "output");
-          } else if (msg.type === "status") {
-            if (msg.message === "connected") { setConnectionStatus("connected"); addLine("✓ Conectado com sucesso!\r\n", "system"); }
-            else if (msg.message === "disconnected") { setConnectionStatus("disconnected"); addLine("\r\nConexão encerrada.", "system"); }
+          if (msg.type === "status") {
+            if (msg.message === "connected") setConnectionStatus("connected");
+            else if (msg.message === "disconnected") setConnectionStatus("disconnected");
           } else if (msg.type === "error") {
-            setConnectionStatus("error"); addLine(`✗ Erro: ${msg.message}`, "error");
+            setConnectionStatus("error"); setError(msg.message);
           }
-        } catch { addLine(evt.data, "output"); }
-      };
+        } catch {}
+      });
 
-      ws.onclose = () => { setConnectionStatus("disconnected"); wsRef.current = null; };
-      ws.onerror = () => { setConnectionStatus("error"); addLine("✗ Erro de WebSocket.", "error"); };
+      ws.addEventListener("close", () => { setConnectionStatus("disconnected"); wsRef.current = null; });
+      ws.addEventListener("error", () => { setConnectionStatus("error"); setError("Erro de WebSocket."); });
     } catch (err: any) {
-      setConnectionStatus("error"); addLine(`✗ ${err.message}`, "error"); setError(err.message);
+      setConnectionStatus("error"); setError(err.message);
     }
   };
 
-  const sendInput = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-    wsRef.current.send(JSON.stringify({ type: "data", data: btoa(inputLine + "\n") }));
-    setInputLine("");
-  };
+  // removed sendInput
 
   const statusColor = { idle: "text-text-muted", connecting: "text-amber-400", connected: "text-emerald-400", disconnected: "text-text-muted", error: "text-rose-400" }[connectionStatus];
   const statusLabel = { idle: "Sem conexão", connecting: "Conectando...", connected: "Conectado", disconnected: "Desconectado", error: "Erro" }[connectionStatus];
@@ -256,7 +235,7 @@ export default function SshConsolePage() {
         </div>
 
         {/* Terminal */}
-        <div className="flex flex-col bg-bg-secondary border border-border-color rounded-2xl overflow-hidden min-h-[500px]">
+        <div className="flex flex-col bg-bg-secondary border border-border-color rounded-2xl overflow-hidden min-h-0 h-full">
           {/* Terminal header */}
           <div className="flex items-center justify-between px-4 py-3 bg-bg-primary/60 border-b border-border-color">
             <div className="flex items-center gap-3">
@@ -284,7 +263,7 @@ export default function SshConsolePage() {
 
           {/* Terminal body */}
           {connectionStatus === "idle" ? (
-            <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8 bg-[#0d1117]">
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8 bg-[#0d1117] rounded-b-2xl">
               <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
                 <TerminalSquare className="w-10 h-10 text-emerald-500" />
               </div>
@@ -295,36 +274,7 @@ export default function SshConsolePage() {
               <p className="text-text-muted text-xs font-mono opacity-50 animate-pulse">{'>'} _</p>
             </div>
           ) : (
-            <div className="flex-1 flex flex-col bg-[#0d1117] min-h-0">
-              <div ref={terminalRef} className="flex-1 overflow-y-auto p-4 font-mono text-[13px] leading-relaxed space-y-0 min-h-0" style={{ maxHeight: "calc(100% - 48px)" }}>
-                {terminalLines.map((line, i) => (
-                  <pre key={i} className={`whitespace-pre-wrap break-all m-0 ${line.type === "error" ? "text-rose-400" : line.type === "system" ? "text-emerald-400/70 italic" : "text-emerald-50"}`}>
-                    {line.text}
-                  </pre>
-                ))}
-                {connectionStatus === "connected" && <span className="text-emerald-400 animate-pulse">█</span>}
-              </div>
-
-              {connectionStatus === "connected" && (
-                <form onSubmit={sendInput} className="flex items-center gap-2 px-4 py-2 border-t border-border-color/30 bg-black/20">
-                  <span className="text-emerald-400 font-mono text-sm shrink-0">$</span>
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={inputLine}
-                    onChange={(e) => setInputLine(e.target.value)}
-                    className="flex-1 bg-transparent text-emerald-50 font-mono text-sm outline-none placeholder-text-muted/40"
-                    placeholder="Digite um comando..."
-                    autoFocus
-                    autoComplete="off"
-                    spellCheck={false}
-                  />
-                  <button type="submit" className="p-1.5 text-emerald-500/60 hover:text-emerald-400 transition-colors cursor-pointer">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
-                  </button>
-                </form>
-              )}
-            </div>
+            <SshTerminal ws={wsRef.current} onDisconnect={disconnect} />
           )}
         </div>
       </div>
