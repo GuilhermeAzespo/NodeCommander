@@ -25,6 +25,7 @@ import {
   Edit3,
   GripVertical
 } from "lucide-react";
+import ConfirmModal from "@/components/ConfirmModal";
 
 interface VM {
   id: string;
@@ -101,6 +102,16 @@ export default function MonitoringPage() {
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [renameModalOpen, setRenameModalOpen] = useState(false);
   const [newDashboardName, setNewDashboardName] = useState("");
+
+  // Confirm Modal state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean,
+    type: "confirm" | "alert",
+    title: string,
+    message: string,
+    actionType?: "delete" | "reset",
+    variant: "danger" | "warning" | "info" | "success"
+  }>({ isOpen: false, type: "confirm", title: "", message: "", variant: "danger" });
 
   // Drag and drop states
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
@@ -211,26 +222,52 @@ export default function MonitoringPage() {
     setNewDashboardName("");
   };
 
-  const handleDeleteDashboard = () => {
+  const openDeleteConfirm = () => {
     if (activeDashboardId === "default") {
-      alert("Não é possível excluir o painel padrão.");
+      setConfirmDialog({
+        isOpen: true,
+        type: "alert",
+        title: "Ação não permitida",
+        message: "Não é possível excluir o painel padrão.",
+        variant: "warning"
+      });
       return;
     }
-    if (confirm(`Deseja realmente excluir o painel "${activeDashboard.name}"?`)) {
-      const updated = dashboards.filter(d => d.id !== activeDashboardId);
-      setDashboards(updated);
-      const nextActiveId = "default";
-      setActiveDashboardId(nextActiveId);
-      localStorage.setItem("nodecommander_dashboards", JSON.stringify(updated));
-      localStorage.setItem("nodecommander_active_dashboard_id", nextActiveId);
-    }
+    setConfirmDialog({
+      isOpen: true,
+      type: "confirm",
+      title: "Excluir Painel",
+      message: `Deseja realmente excluir o painel "${activeDashboard?.name}"?`,
+      actionType: "delete",
+      variant: "danger"
+    });
   };
 
-  const handleResetLayout = () => {
-    if (confirm("Deseja restaurar o layout padrão para este painel?")) {
-      updateWidgets(DEFAULT_WIDGETS);
-      setIsEditing(false);
-    }
+  const executeDelete = () => {
+    const updated = dashboards.filter(d => d.id !== activeDashboardId);
+    setDashboards(updated);
+    const nextActiveId = "default";
+    setActiveDashboardId(nextActiveId);
+    localStorage.setItem("nodecommander_dashboards", JSON.stringify(updated));
+    localStorage.setItem("nodecommander_active_dashboard_id", nextActiveId);
+    setConfirmDialog({ ...confirmDialog, isOpen: false });
+  };
+
+  const openResetConfirm = () => {
+    setConfirmDialog({
+      isOpen: true,
+      type: "confirm",
+      title: "Restaurar Layout",
+      message: "Deseja restaurar o layout padrão para este painel? Todas as posições e configurações serão perdidas.",
+      actionType: "reset",
+      variant: "warning"
+    });
+  };
+
+  const executeReset = () => {
+    updateWidgets(DEFAULT_WIDGETS);
+    setIsEditing(false);
+    setConfirmDialog({ ...confirmDialog, isOpen: false });
   };
 
   const handleAddWidget = (type: Widget["type"]) => {
@@ -730,7 +767,7 @@ export default function MonitoringPage() {
                   </button>
 
                   <button
-                    onClick={handleDeleteDashboard}
+                    onClick={openDeleteConfirm}
                     className="p-2 bg-bg-primary hover:bg-red-500/10 border border-border-color text-red-500 hover:text-red-400 rounded-xl transition-colors cursor-pointer"
                     title="Excluir Painel Ativo"
                   >
@@ -752,7 +789,7 @@ export default function MonitoringPage() {
                     <span>Adicionar Widget</span>
                   </button>
                   <button
-                    onClick={handleResetLayout}
+                    onClick={openResetConfirm}
                     className="flex items-center gap-1.5 bg-bg-primary hover:bg-bg-tertiary border border-border-color text-text-secondary hover:text-text-primary px-3.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer"
                     title="Restaurar Layout Inicial"
                   >
@@ -1547,6 +1584,23 @@ export default function MonitoringPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        variant={confirmDialog.variant}
+        confirmText={confirmDialog.type === "alert" ? "OK" : "Confirmar"}
+        onConfirm={() => {
+          if (confirmDialog.type === "confirm") {
+            if (confirmDialog.actionType === "delete") executeDelete();
+            if (confirmDialog.actionType === "reset") executeReset();
+          } else {
+            setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+          }
+        }}
+        onCancel={confirmDialog.type === "alert" ? undefined : () => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }

@@ -13,6 +13,7 @@ import {
   ShieldAlert,
   Server
 } from "lucide-react";
+import ConfirmModal from "@/components/ConfirmModal";
 
 interface HypervisorNode {
   id: string;
@@ -29,6 +30,7 @@ interface UserPermission {
 interface User {
   id: string;
   name: string;
+  username: string;
   email: string;
   role: "ADMIN" | "OPERATOR" | "VIEWER";
   createdAt: string;
@@ -46,6 +48,13 @@ export default function UsersPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [submitLoading, setSubmitLoading] = useState(false);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+
+  // Confirm Modal state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean,
+    userId: string
+  }>({ isOpen: false, userId: "" });
 
   // Form states
   const [name, setName] = useState("");
@@ -192,11 +201,14 @@ export default function UsersPage() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Deseja realmente excluir este usuário? Esta ação não pode ser desfeita.")) {
-      return;
-    }
+  const openDeleteConfirm = (id: string) => {
+    setConfirmDialog({ isOpen: true, userId: id });
+  };
 
+  const executeDelete = async () => {
+    const id = confirmDialog.userId;
+    setConfirmDialog({ isOpen: false, userId: "" });
+    setActionLoadingId(id);
     try {
       const res = await fetch(`/api/admin/users/${id}`, {
         method: "DELETE"
@@ -212,6 +224,8 @@ export default function UsersPage() {
       }
     } catch (err) {
       setError("Erro de rede ao deletar usuário.");
+    } finally {
+      setActionLoadingId(null);
     }
   };
 
@@ -314,13 +328,16 @@ export default function UsersPage() {
                       >
                         <Edit3 className="w-4 h-4" />
                       </button>
-                      <button
-                        onClick={() => handleDelete(u.id)}
-                        className="p-2 bg-bg-primary hover:bg-red-500/10 border border-border-color hover:border-red-500/30 text-text-secondary hover:text-red-500 rounded-lg transition-colors cursor-pointer"
-                        title="Deletar Usuário"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {u.username !== "admin" && (
+                        <button
+                          onClick={() => openDeleteConfirm(u.id)}
+                          className="p-2 bg-bg-primary hover:bg-red-500/10 border border-border-color hover:border-red-500/30 text-text-secondary hover:text-red-500 rounded-lg transition-colors cursor-pointer disabled:opacity-50"
+                          disabled={actionLoadingId === u.id}
+                          title="Deletar Usuário"
+                        >
+                          {actionLoadingId === u.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -476,6 +493,17 @@ export default function UsersPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        title="Excluir Usuário"
+        message="Deseja realmente excluir este usuário? Esta ação não pode ser desfeita."
+        confirmText="Sim, excluir"
+        cancelText="Cancelar"
+        variant="danger"
+        onConfirm={executeDelete}
+        onCancel={() => setConfirmDialog({ isOpen: false, userId: "" })}
+      />
     </div>
   );
 }

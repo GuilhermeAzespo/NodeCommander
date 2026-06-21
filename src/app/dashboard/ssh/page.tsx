@@ -5,6 +5,7 @@ import {
   CheckCircle2, AlertCircle, X, Wifi, WifiOff, Save, Eye, EyeOff, RefreshCw
 } from "lucide-react";
 import SshTerminal from "@/components/SshTerminal";
+import ConfirmModal from "@/components/ConfirmModal";
 
 interface SshSession {
   id: string;
@@ -38,6 +39,9 @@ export default function SshConsolePage() {
   const [formPass, setFormPass] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
+
+  // Confirm Modal state
+  const [confirmDialog, setConfirmDialog] = useState<{isOpen: boolean, sessionId: string}>({ isOpen: false, sessionId: "" });
 
   useEffect(() => {
     const init = async () => {
@@ -120,8 +124,13 @@ export default function SshConsolePage() {
     finally { setFormLoading(false); }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Deletar esta sessão SSH?")) return;
+  const openDeleteConfirm = (id: string) => {
+    setConfirmDialog({ isOpen: true, sessionId: id });
+  };
+
+  const handleDelete = async () => {
+    const id = confirmDialog.sessionId;
+    setConfirmDialog({ isOpen: false, sessionId: "" });
     try {
       await fetch(`/api/ssh/sessions?id=${id}`, { method: "DELETE" });
       closeTab(id);
@@ -272,7 +281,7 @@ export default function SshConsolePage() {
                       </div>
                       <div className="flex items-center gap-1 shrink-0">
                         <button onClick={() => openEditForm(s)} className="p-1.5 rounded-lg hover:bg-bg-primary text-text-muted hover:text-text-primary transition-colors cursor-pointer" title="Editar"><Edit2 className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => handleDelete(s.id)} className="p-1.5 rounded-lg hover:bg-red-500/10 text-text-muted hover:text-red-400 transition-colors cursor-pointer" title="Deletar"><Trash2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => openDeleteConfirm(s.id)} className="p-1.5 rounded-lg hover:bg-red-500/10 text-text-muted hover:text-red-400 transition-colors cursor-pointer" title="Deletar"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -410,6 +419,17 @@ export default function SshConsolePage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        title="Deletar Sessão SSH"
+        message="Tem certeza que deseja deletar esta sessão SSH salva? Esta ação não pode ser desfeita."
+        confirmText="Sim, deletar"
+        cancelText="Cancelar"
+        variant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDialog({ isOpen: false, sessionId: "" })}
+      />
     </div>
   );
 }

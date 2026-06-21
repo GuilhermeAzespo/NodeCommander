@@ -25,6 +25,7 @@ import {
   Lock,
   TerminalSquare
 } from "lucide-react";
+import ConfirmModal from "@/components/ConfirmModal";
 
 const NoVncConsole = dynamic(() => import("@/components/NoVncConsole"), { ssr: false });
 
@@ -117,6 +118,16 @@ export default function VMsPage() {
   const [templateNameInput, setTemplateNameInput] = useState("");
   const [showSaveTemplateInput, setShowSaveTemplateInput] = useState(false);
   const [selectedStorageForTemplate, setSelectedStorageForTemplate] = useState("");
+
+  // Confirm Modal state
+  const [confirmDialog, setConfirmDialog] = useState<{
+    isOpen: boolean, 
+    type: "confirm" | "alert", 
+    title: string, 
+    message: string, 
+    actionId?: string,
+    variant: "danger" | "warning" | "info" | "success"
+  }>({ isOpen: false, type: "confirm", title: "", message: "", variant: "danger" });
 
   useEffect(() => {
     if (selectedHvForWizard && wizardOpen) {
@@ -394,15 +405,31 @@ export default function VMsPage() {
           }
         }
       } else {
-        alert(data.error || "Erro ao salvar template.");
+        setConfirmDialog({
+          isOpen: true,
+          type: "alert",
+          title: "Erro",
+          message: data.error || "Erro ao salvar template.",
+          variant: "danger"
+        });
       }
     } catch (err) {
       console.error("Error saving template:", err);
     }
   };
 
-  const handleDeleteTemplate = async (templateId: string) => {
-    if (!confirm("Deseja realmente excluir este template?")) return;
+  const openDeleteTemplateConfirm = (templateId: string) => {
+    setConfirmDialog({
+      isOpen: true,
+      type: "confirm",
+      title: "Excluir Template",
+      message: "Deseja realmente excluir este template?",
+      actionId: templateId,
+      variant: "danger"
+    });
+  };
+
+  const executeDeleteTemplate = async (templateId: string) => {
     try {
       const res = await fetch(`/api/vms/templates?id=${templateId}`, {
         method: "DELETE"
@@ -412,7 +439,13 @@ export default function VMsPage() {
         setSelectedTemplateId("");
       } else {
         const data = await res.json();
-        alert(data.error || "Erro ao excluir template.");
+        setConfirmDialog({
+          isOpen: true,
+          type: "alert",
+          title: "Erro",
+          message: data.error || "Erro ao excluir template.",
+          variant: "danger"
+        });
       }
     } catch (err) {
       console.error("Error deleting template:", err);
@@ -998,7 +1031,7 @@ export default function VMsPage() {
                 {selectedTemplateId && (
                   <button
                     type="button"
-                    onClick={() => handleDeleteTemplate(selectedTemplateId)}
+                    onClick={() => openDeleteTemplateConfirm(selectedTemplateId)}
                     className="p-1 bg-red-500/10 hover:bg-red-500/20 text-red-500 rounded transition-colors cursor-pointer"
                     title="Excluir este template"
                   >
@@ -1876,6 +1909,21 @@ export default function VMsPage() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={confirmDialog.isOpen}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        variant={confirmDialog.variant}
+        confirmText={confirmDialog.type === "alert" ? "OK" : "Confirmar"}
+        onConfirm={() => {
+          if (confirmDialog.type === "confirm" && confirmDialog.actionId) {
+            executeDeleteTemplate(confirmDialog.actionId);
+          }
+          setConfirmDialog(prev => ({ ...prev, isOpen: false }));
+        }}
+        onCancel={confirmDialog.type === "alert" ? undefined : () => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 }
