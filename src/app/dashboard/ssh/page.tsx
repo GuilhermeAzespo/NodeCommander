@@ -39,16 +39,48 @@ export default function SshConsolePage() {
   const [showPass, setShowPass] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
 
-  useEffect(() => { fetchSessions(); }, []);
+  useEffect(() => {
+    const init = async () => {
+      const loaded = await fetchSessions();
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const autoIp = params.get("auto_ip");
+        const autoName = params.get("auto_name");
+        
+        if (autoIp) {
+          const existing = loaded.find((s: SshSession) => s.host === autoIp);
+          if (existing) {
+            connect(existing);
+          } else {
+            resetForm();
+            setFormHost(autoIp);
+            if (autoName) setFormName(autoName);
+            setShowForm(true);
+          }
+          // Remove query params to prevent re-triggering on reload
+          window.history.replaceState({}, document.title, window.location.pathname);
+        }
+      }
+    };
+    init();
+  }, []);
 
   const fetchSessions = async () => {
     setLoading(true);
     try {
       const res = await fetch("/api/ssh/sessions");
       const data = await res.json();
-      if (res.ok) setSessions(data.sessions || []);
-    } catch { setError("Falha ao carregar sessões."); }
-    finally { setLoading(false); }
+      if (res.ok) {
+        setSessions(data.sessions || []);
+        return data.sessions || [];
+      }
+      return [];
+    } catch { 
+      setError("Falha ao carregar sessões."); 
+      return [];
+    } finally { 
+      setLoading(false); 
+    }
   };
 
   const resetForm = () => {
