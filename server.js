@@ -1,3 +1,5 @@
+require('next/dist/lib/load-env-config').loadEnvConfig(process.cwd());
+
 const { createServer } = require('http');
 const { parse } = require('url');
 const next = require('next');
@@ -153,9 +155,21 @@ function handleSshWebSocket(ws, sessionId) {
         'ecdsa-sha2-nistp384', 'ecdsa-sha2-nistp521',
         'rsa-sha2-512', 'rsa-sha2-256'
       ],
+      kex: [
+        'diffie-hellman-group1-sha1', 'diffie-hellman-group14-sha1',
+        'diffie-hellman-group-exchange-sha1', 'diffie-hellman-group-exchange-sha256',
+        'ecdh-sha2-nistp256', 'ecdh-sha2-nistp384', 'ecdh-sha2-nistp521',
+        'curve25519-sha256', 'curve25519-sha256@libssh.org'
+      ],
+      cipher: [
+        'aes128-ctr', 'aes192-ctr', 'aes256-ctr',
+        'aes128-gcm@openssh.com', 'aes256-gcm@openssh.com',
+        'aes128-cbc', 'aes192-cbc', 'aes256-cbc', '3des-cbc'
+      ]
     },
     // Accept any host key (similar to ssh -o StrictHostKeyChecking=no)
     hostVerifier: () => true,
+    debug: (msg) => console.log('[SSH DEBUG]', msg)
   });
 }
 
