@@ -163,8 +163,8 @@ function runUpdateInBackground() {
   const steps = [
     // Fix ownership first so git/npm/prisma don't fail due to root-owned files
     { cmd: "bash", args: ["-c", `chown -R ${currentUser}:${currentUser} ${appDir} 2>/dev/null || true`] },
-    { cmd: "git", args: ["checkout", "."] },
-    { cmd: "git", args: ["pull"] },
+    { cmd: "git", args: ["fetch", "--all"] },
+    { cmd: "git", args: ["reset", "--hard", "origin/main"] },
     { cmd: "npm", args: ["install"] },
     { cmd: "npx", args: ["prisma", "generate"] },
     { cmd: "npx", args: ["prisma", "db", "push"] },
