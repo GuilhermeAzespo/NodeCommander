@@ -1,6 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import { 
   Cpu, 
   Play, 
@@ -938,13 +939,13 @@ export default function VMsPage() {
                                       <Terminal className="w-3.5 h-3.5" />
                                     </button>
                                     {vm.ipAddress && (
-                                      <a
+                                      <Link
                                         href={`/dashboard/ssh?auto_ip=${vm.ipAddress}&auto_name=${encodeURIComponent(vm.name)}`}
                                         className="p-1.5 bg-bg-primary hover:bg-emerald-500/10 border border-border-color hover:border-emerald-500/30 text-text-secondary hover:text-emerald-500 rounded-lg transition-colors cursor-pointer inline-flex"
                                         title="Acesso Rápido SSH"
                                       >
                                         <TerminalSquare className="w-3.5 h-3.5" />
-                                      </a>
+                                      </Link>
                                     )}
                                     <button
                                       onClick={() => handleVMAction(vm.id, "STOP")}
