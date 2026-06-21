@@ -1,10 +1,13 @@
 {
   "name": "node-commander",
-  "version": "0.2.53",
+  "version": "0.2.54",
   "private": true,
   "scripts": {
+    "predev": "node check-env.js",
     "dev": "node server.js",
+    "prebuild": "node check-env.js",
     "build": "next build",
+    "prestart": "node check-env.js",
     "start": "NODE_ENV=production node server.js",
     "lint": "eslint"
   },

@@ -2,8 +2,36 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { comparePassword, loginUser } from "@/lib/auth";
 
+// Rate limit na memória (em produção usar Redis/DB)
+const rateLimit = new Map<string, { count: number; resetTime: number }>();
+const MAX_ATTEMPTS = 5;
+const LOCKOUT_MS = 15 * 60 * 1000; // 15 minutos
+
 export async function POST(req: Request) {
   try {
+    const ip = req.headers.get("x-forwarded-for") || req.headers.get("x-real-ip") || "unknown";
+    
+    // Checa Rate Limit
+    const now = Date.now();
+    const limit = rateLimit.get(ip);
+    if (limit && now < limit.resetTime && limit.count >= MAX_ATTEMPTS) {
+      return NextResponse.json(
+        { error: "Muitas tentativas falhas. Tente novamente em 15 minutos." },
+        { status: 429 }
+      );
+    }
+
+    const registerFailure = () => {
+      const current = rateLimit.get(ip) || { count: 0, resetTime: now + LOCKOUT_MS };
+      if (now > current.resetTime) {
+        current.count = 1;
+        current.resetTime = now + LOCKOUT_MS;
+      } else {
+        current.count += 1;
+      }
+      rateLimit.set(ip, current);
+    };
+
     const { email, password } = await req.json();
 
     if (!email || !password) {
@@ -18,6 +46,7 @@ export async function POST(req: Request) {
     });
 
     if (!user) {
+      registerFailure();
       return NextResponse.json(
         { error: "Credenciais inválidas." },
         { status: 401 }
@@ -26,11 +55,15 @@ export async function POST(req: Request) {
 
     const isMatch = await comparePassword(password, user.passwordHash);
     if (!isMatch) {
+      registerFailure();
       return NextResponse.json(
         { error: "Credenciais inválidas." },
         { status: 401 }
       );
     }
+
+    // Login com sucesso: reseta as tentativas
+    rateLimit.delete(ip);
 
     // Set HttpOnly cookie
     await loginUser(user.id, user.role);
