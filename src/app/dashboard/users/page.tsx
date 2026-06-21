@@ -34,6 +34,7 @@ interface User {
   email: string;
   role: "ADMIN" | "OPERATOR" | "VIEWER";
   createdAt: string;
+  authSource: "LOCAL" | "AD" | "GOOGLE" | "M365";
   permissions: UserPermission[];
 }
 
@@ -287,7 +288,18 @@ export default function UsersPage() {
               <tbody className="divide-y divide-border-color">
                 {users.map((u) => (
                   <tr key={u.id} className="hover:bg-bg-tertiary/10 transition-colors">
-                    <td className="px-6 py-4 text-text-primary font-semibold whitespace-nowrap">{u.name}</td>
+                    <td className="px-6 py-4 text-text-primary font-semibold whitespace-nowrap flex items-center gap-2">
+                      {u.name}
+                      {u.authSource !== "LOCAL" && (
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                          u.authSource === "AD" ? "bg-blue-500/10 text-blue-500 border border-blue-500/20" :
+                          u.authSource === "GOOGLE" ? "bg-amber-500/10 text-amber-500 border border-amber-500/20" :
+                          u.authSource === "M365" ? "bg-cyan-500/10 text-cyan-500 border border-cyan-500/20" : ""
+                        }`}>
+                          {u.authSource}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-6 py-4 text-text-secondary">{u.email}</td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`px-2.5 py-1 rounded-full text-xs font-bold flex items-center gap-1.5 w-max ${
