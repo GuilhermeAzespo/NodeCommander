@@ -22,7 +22,7 @@ const jwt = require('jsonwebtoken');
 const { WebSocketServer } = require('ws');
 const { Client: SshClient } = require('ssh2');
 const Database = require('better-sqlite3');
-const path = require('path');
+
 const crypto = require('crypto');
 
 const dev = process.env.NODE_ENV !== 'production';
