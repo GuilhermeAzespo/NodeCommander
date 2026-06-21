@@ -142,10 +142,18 @@ function handleSshWebSocket(ws, sessionId) {
 
   conn.connect({
     host: session.host,
-    port: session.port || 22,
+    port: parseInt(session.port, 10) || 22,
     username: session.username,
     password,
-    readyTimeout: 10000,
+    readyTimeout: 30000,
+    keepaliveInterval: 10000,
+    algorithms: {
+      serverHostKey: [
+        'ssh-rsa', 'ssh-dss', 'ecdsa-sha2-nistp256',
+        'ecdsa-sha2-nistp384', 'ecdsa-sha2-nistp521',
+        'rsa-sha2-512', 'rsa-sha2-256'
+      ],
+    },
     // Accept any host key (similar to ssh -o StrictHostKeyChecking=no)
     hostVerifier: () => true,
   });
