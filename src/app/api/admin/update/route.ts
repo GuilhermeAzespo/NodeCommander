@@ -59,7 +59,7 @@ async function getRemoteVersion(): Promise<string | null> {
 
     const res = await fetch("https://api.github.com/repos/GuilhermeAzespo/NodeCommander/contents/package.json", {
       headers,
-      next: { revalidate: 60 } // cache for 1 minute
+      cache: "no-store"
     });
     if (!res.ok) {
       throw new Error(`GitHub API returned ${res.status}`);
